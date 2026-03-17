@@ -1,328 +1,828 @@
 import { useState } from "react";
 
+const GOOGLE_FONTS = `
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap');
+`;
+
+const styles = `
+  ${GOOGLE_FONTS}
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: #f9f9f7;
+    color: #111;
+  }
+
+  .page-root {
+    min-height: 100vh;
+    background: #f9f9f7;
+  }
+
+  /* ── NAV ── */
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: rgba(249,249,247,0.85);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid #e8e8e3;
+    padding: 0 2rem;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 1.25rem;
+    letter-spacing: -0.02em;
+    color: #111;
+  }
+  .nav-logo-dot {
+    width: 28px;
+    height: 28px;
+    background: #111;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .nav-logo-dot svg { fill: #f9f9f7; }
+  .nav-pill {
+    background: #111;
+    color: #f9f9f7;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 5px 14px;
+    border-radius: 100px;
+  }
+
+  /* ── HERO ── */
+  .hero {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 80px 2rem 60px;
+    text-align: center;
+  }
+  .hero-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: #fff;
+    border: 1px solid #e0e0d8;
+    border-radius: 100px;
+    padding: 6px 16px 6px 10px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: #555;
+    margin-bottom: 28px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  }
+  .hero-tag-dot {
+    width: 6px; height: 6px;
+    background: #22c55e;
+    border-radius: 50%;
+    animation: pulse-green 2s infinite;
+  }
+  @keyframes pulse-green {
+    0%,100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.5); }
+    50% { box-shadow: 0 0 0 6px rgba(34,197,94,0); }
+  }
+  .hero h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(2.4rem, 5vw, 3.8rem);
+    font-weight: 800;
+    line-height: 1.08;
+    letter-spacing: -0.04em;
+    color: #111;
+    margin-bottom: 18px;
+  }
+  .hero h1 em {
+    font-style: normal;
+    background: linear-gradient(135deg, #6366f1, #a855f7);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .hero p {
+    font-size: 1.05rem;
+    color: #666;
+    line-height: 1.7;
+    font-weight: 300;
+    max-width: 540px;
+    margin: 0 auto;
+  }
+
+  /* ── UPLOAD CARD ── */
+  .card {
+    background: #fff;
+    border: 1px solid #e8e8e3;
+    border-radius: 20px;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.05);
+  }
+  .upload-wrap {
+    max-width: 700px;
+    margin: 0 auto 64px;
+    padding: 0 2rem;
+  }
+  .upload-card {
+    padding: 36px;
+  }
+  .upload-zone {
+    border: 2px dashed #d4d4cc;
+    border-radius: 14px;
+    padding: 40px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: #fafaf8;
+    position: relative;
+  }
+  .upload-zone:hover {
+    border-color: #6366f1;
+    background: #f5f5ff;
+  }
+  .upload-zone.has-file {
+    border-color: #22c55e;
+    background: #f0fdf4;
+  }
+  .upload-icon {
+    width: 52px; height: 52px;
+    margin: 0 auto 14px;
+    background: #f0f0eb;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+  }
+  .upload-zone.has-file .upload-icon { background: #dcfce7; }
+  .upload-label {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 1rem;
+    color: #222;
+    margin-bottom: 6px;
+  }
+  .upload-sub {
+    font-size: 0.82rem;
+    color: #999;
+  }
+  .file-name {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #16a34a;
+    margin-top: 8px;
+  }
+  .file-input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+  .btn-primary {
+    width: 100%;
+    margin-top: 20px;
+    padding: 15px;
+    border-radius: 12px;
+    border: none;
+    background: #111;
+    color: #fff;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 0.95rem;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: #2d2d2d;
+    transform: translateY(-1px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  }
+  .btn-primary:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+    transform: none;
+  }
+  .spinner {
+    width: 18px; height: 18px;
+    border: 2.5px solid rgba(255,255,255,0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .success-msg {
+    margin-top: 16px;
+    padding: 12px 16px;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 10px;
+    text-align: center;
+    font-size: 0.88rem;
+    font-weight: 500;
+    color: #15803d;
+  }
+  .error-msg {
+    margin-top: 16px;
+    padding: 12px 16px;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 10px;
+    text-align: center;
+    font-size: 0.88rem;
+    font-weight: 500;
+    color: #dc2626;
+  }
+
+  /* ── ANALYSIS ── */
+  .section-wrap {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 2rem 64px;
+  }
+  .section-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.6rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    color: #111;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .analysis-card {
+    padding: 32px;
+  }
+  .analysis-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+  }
+  .analysis-chip {
+    background: #fafaf8;
+    border: 1px solid #e8e8e3;
+    border-radius: 14px;
+    padding: 18px 20px;
+  }
+  .analysis-chip-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #999;
+    margin-bottom: 8px;
+  }
+  .analysis-chip-value {
+    font-size: 0.92rem;
+    font-weight: 500;
+    color: #222;
+    line-height: 1.5;
+  }
+  .analysis-chip.wide { grid-column: 1 / -1; }
+  .keyword-cloud {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .kw-tag {
+    background: #111;
+    color: #f9f9f7;
+    font-size: 0.77rem;
+    font-weight: 500;
+    padding: 5px 13px;
+    border-radius: 100px;
+  }
+
+  /* ── DIST STRIP ── */
+  .dist-strip {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 28px;
+  }
+  .dist-item {
+    flex: 1;
+    min-width: 80px;
+    background: #fafaf8;
+    border: 1px solid #e8e8e3;
+    border-radius: 12px;
+    padding: 14px 12px;
+    text-align: center;
+  }
+  .dist-num {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.6rem;
+    font-weight: 800;
+    line-height: 1;
+  }
+  .dist-num.green { color: #16a34a; }
+  .dist-num.blue { color: #2563eb; }
+  .dist-num.yellow { color: #ca8a04; }
+  .dist-num.orange { color: #ea580c; }
+  .dist-num.gray { color: #6b7280; }
+  .dist-label {
+    font-size: 0.72rem;
+    color: #999;
+    margin-top: 4px;
+  }
+
+  /* ── JOB CARDS ── */
+  .jobs-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .jobs-meta {
+    font-size: 0.82rem;
+    color: #888;
+    margin-bottom: 24px;
+  }
+  .btn-ghost {
+    padding: 8px 18px;
+    background: #fafaf8;
+    border: 1px solid #e0e0d8;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #444;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .btn-ghost:hover { background: #f0f0eb; border-color: #ccc; }
+  .jobs-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+  }
+  .job-card {
+    background: #fff;
+    border: 1px solid #e8e8e3;
+    border-radius: 18px;
+    padding: 24px;
+    transition: all 0.25s;
+    position: relative;
+    overflow: hidden;
+  }
+  .job-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 18px;
+    border: 1.5px solid transparent;
+    transition: border-color 0.25s;
+    pointer-events: none;
+  }
+  .job-card:hover {
+    box-shadow: 0 12px 40px rgba(0,0,0,0.1);
+    transform: translateY(-3px);
+  }
+  .job-card:hover::before { border-color: #6366f1; }
+
+  .job-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 16px;
+  }
+  .company-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .company-logo {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    object-fit: cover;
+    border: 1px solid #f0f0eb;
+  }
+  .company-name {
+    font-weight: 600;
+    font-size: 0.88rem;
+    color: #222;
+  }
+  .company-source {
+    font-size: 0.72rem;
+    color: #aaa;
+  }
+  .score-badge {
+    font-family: 'Syne', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 100px;
+    white-space: nowrap;
+  }
+  .score-excellent { background: #dcfce7; color: #15803d; }
+  .score-great { background: #dbeafe; color: #1d4ed8; }
+  .score-good { background: #fef9c3; color: #854d0e; }
+  .score-fair { background: #ffedd5; color: #c2410c; }
+  .score-low { background: #f3f4f6; color: #4b5563; }
+
+  .job-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #111;
+    line-height: 1.35;
+    margin-bottom: 14px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    min-height: 2.7rem;
+  }
+  .job-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 18px;
+  }
+  .job-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 0.82rem;
+    color: #666;
+  }
+  .meta-icon { font-size: 0.85rem; }
+  .btn-apply {
+    display: block;
+    width: 100%;
+    text-align: center;
+    padding: 11px;
+    background: #111;
+    color: #fff;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 0.88rem;
+    text-decoration: none;
+    transition: all 0.2s;
+    letter-spacing: 0.01em;
+  }
+  .btn-apply:hover {
+    background: #333;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+  }
+
+  /* ── LOADING ── */
+  .loading-state {
+    text-align: center;
+    padding: 80px 0;
+  }
+  .loading-dots {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  .loading-dot {
+    width: 10px; height: 10px;
+    background: #111;
+    border-radius: 50%;
+    animation: bounce-dot 1.2s infinite;
+  }
+  .loading-dot:nth-child(2) { animation-delay: 0.2s; }
+  .loading-dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes bounce-dot {
+    0%,80%,100% { transform: scale(0.7); opacity: 0.4; }
+    40% { transform: scale(1); opacity: 1; }
+  }
+  .loading-text {
+    font-size: 0.95rem;
+    color: #888;
+    font-weight: 400;
+  }
+
+  /* ── PAGINATION ── */
+  .pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 6px;
+    margin-top: 40px;
+  }
+  .page-btn {
+    width: 36px; height: 36px;
+    border-radius: 9px;
+    border: 1px solid #e0e0d8;
+    background: #fff;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #444;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .page-btn:hover:not(:disabled) { border-color: #111; color: #111; }
+  .page-btn.active { background: #111; color: #fff; border-color: #111; }
+  .page-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .page-btn.wide { width: auto; padding: 0 14px; font-size: 0.82rem; }
+
+  /* ── EMPTY ── */
+  .empty-state {
+    text-align: center;
+    padding: 64px 24px;
+  }
+  .empty-icon {
+    font-size: 3rem;
+    margin-bottom: 16px;
+    opacity: 0.5;
+  }
+  .empty-text {
+    font-size: 0.95rem;
+    color: #888;
+    max-width: 320px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+
+  @media (max-width: 600px) {
+    .nav { padding: 0 1rem; }
+    .hero { padding: 48px 1rem 40px; }
+    .upload-wrap, .section-wrap { padding: 0 1rem 48px; }
+    .upload-card, .analysis-card { padding: 22px; }
+  }
+`;
+
 export default function ResumeUploader() {
-    const [file, setFile] = useState(null);
-    const [message, setMessage] = useState("");
-    const [analysis, setAnalysis] = useState(null);
-    const [jobs, setJobs] = useState([]);
-    const [pagination, setPagination] = useState(null);
-    const [currentPage, setCurrentPage] = useState(1);
-    const [loading, setLoading] = useState(false);
-    const [loadingJobs, setLoadingJobs] = useState(false);
+  const [file, setFile] = useState(null);
+  const [message, setMessage] = useState({ text: "", type: "" });
+  const [analysis, setAnalysis] = useState(null);
+  const [jobs, setJobs] = useState([]);
+  const [scoreDistribution, setScoreDistribution] = useState(null);
+  const [pagination, setPagination] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [loadingJobs, setLoadingJobs] = useState(false);
 
-    const handleFileChange = (e) => {
-        setFile(e.target.files[0]);
-    };
+  const handleFileChange = (e) => setFile(e.target.files[0]);
 
-    const handleUpload = async () => {
-        if (!file) {
-            setMessage("Please select a file first.");
-            return;
-        }
+  const handleUpload = async () => {
+    if (!file) { setMessage({ text: "Please select a file first.", type: "error" }); return; }
+    setLoading(true);
+    setMessage({ text: "", type: "" });
+    setAnalysis(null);
+    setJobs([]);
+    const formData = new FormData();
+    formData.append("resume", file);
+    try {
+      const res = await fetch("http://localhost:3001/api/resume/upload", { method: "POST", body: formData });
+      if (!res.ok) throw new Error(`Status: ${res.status}`);
+      const data = await res.json();
+      setMessage({ text: "Resume analysed successfully!", type: "success" });
+      setAnalysis(data.analysis);
+      fetchMatchingJobs();
+    } catch (err) {
+      setMessage({ text: `Upload failed: ${err.message}`, type: "error" });
+    } finally {
+      setLoading(false);
+    }
+  };
 
-        setLoading(true);
-        setMessage("");
-        setAnalysis(null);
-        setJobs([]);
+  const fetchMatchingJobs = async (page = 1) => {
+    setLoadingJobs(true);
+    setCurrentPage(page);
+    try {
+      const res = await fetch(`http://localhost:3001/api/resume/jobs?page=${page}&limit=12`);
+      if (!res.ok) throw new Error(`Status: ${res.status}`);
+      const data = await res.json();
+      setJobs(data.jobs || []);
+      setPagination(data.pagination);
+      setScoreDistribution(data.score_distribution);
+      if (data.jobs?.length) setTimeout(() => document.getElementById("jobs-section")?.scrollIntoView({ behavior: "smooth" }), 100);
+    } catch (err) { console.error(err); }
+    finally { setLoadingJobs(false); }
+  };
 
-        const formData = new FormData();
-        formData.append("resume", file);
+  const getScoreClass = (s) => {
+    if (s >= 90) return "score-excellent";
+    if (s >= 80) return "score-great";
+    if (s >= 70) return "score-good";
+    if (s >= 60) return "score-fair";
+    return "score-low";
+  };
+  const getScoreLabel = (s) => {
+    if (s >= 90) return "Excellent";
+    if (s >= 80) return "Great";
+    if (s >= 70) return "Good";
+    if (s >= 60) return "Fair";
+    return "Low";
+  };
+  const getCompanyLogo = (company) =>
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(company)}&background=f4f4f0&color=111&size=80&bold=true&font-size=0.45`;
 
-        try {
-            const response = await fetch("http://localhost:3001/api/resume/upload", {
-                method: "POST",
-                body: formData,
-            });
+  const renderPageNumbers = () => {
+    if (!pagination) return null;
+    const total = pagination.total_pages;
+    const pages = [];
+    for (let i = 1; i <= Math.min(total, 10); i++) {
+      const show = i <= 2 || i > total - 2 || Math.abs(i - currentPage) <= 1;
+      if (!show && i === 3) { pages.push(<span key="el" style={{ padding: "0 4px", color: "#bbb", display: "flex", alignItems: "center" }}>…</span>); continue; }
+      if (!show) continue;
+      pages.push(
+        <button key={i} className={`page-btn ${currentPage === i ? "active" : ""}`} onClick={() => fetchMatchingJobs(i)}>{i}</button>
+      );
+    }
+    return pages;
+  };
 
-            if (!response.ok) {
-                throw new Error(`Upload failed with status: ${response.status}`);
-            }
+  return (
+    <>
+      <style>{styles}</style>
+      <div className="page-root">
 
-            const data = await response.json();
-            setMessage("✅ Resume analyzed successfully!");
-            setAnalysis(data.analysis);
-
-            // Automatically fetch matching jobs
-            fetchMatchingJobs();
-
-        } catch (error) {
-            console.error("Upload error:", error);
-            setMessage(`❌ Upload failed: ${error.message}`);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const fetchMatchingJobs = async (page = 1) => {
-        setLoadingJobs(true);
-        setCurrentPage(page);
-        
-        try {
-            const response = await fetch(`http://localhost:3001/api/resume/jobs?page=${page}&limit=12`);
-            
-            if (!response.ok) {
-                throw new Error(`Failed to fetch jobs: ${response.status}`);
-            }
-
-            const data = await response.json();
-            setJobs(data.jobs || []);
-            setPagination(data.pagination);
-            
-            // Scroll to jobs section
-            if (data.jobs && data.jobs.length > 0) {
-                setTimeout(() => {
-                    document.getElementById('jobs-section')?.scrollIntoView({ behavior: 'smooth' });
-                }, 100);
-            }
-            
-        } catch (error) {
-            console.error("Error fetching jobs:", error);
-        } finally {
-            setLoadingJobs(false);
-        }
-    };
-
-    // Company logo mapping (using placeholder service)
-    const getCompanyLogo = (company) => {
-        const companyLower = company.toLowerCase();
-        // Using UI Avatars as fallback
-        return `https://ui-avatars.com/api/?name=${encodeURIComponent(company)}&background=random&size=80&bold=true`;
-    };
-
-    return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-            {/* Header */}
-            <div className="bg-white shadow-sm border-b">
-                <div className="max-w-7xl mx-auto px-4 py-6">
-                    <h1 className="text-3xl font-bold text-gray-900">
-                        🎯 AI Resume Job Matcher
-                    </h1>
-                    <p className="text-gray-600 mt-1">
-                        Upload your resume and find matching jobs from top companies
-                    </p>
-                </div>
+        {/* NAV */}
+        <nav className="nav">
+          <div className="nav-brand">
+            <div className="nav-logo-dot">
+              <svg width="14" height="14" viewBox="0 0 14 14"><path d="M7 1L13 4V10L7 13L1 10V4L7 1Z"/></svg>
             </div>
+            JobSphere
+          </div>
+          <div className="nav-pill">AI-Powered</div>
+        </nav>
 
-            <div className="max-w-7xl mx-auto px-4 py-8">
-                {/* Upload Section */}
-                <div className="bg-white shadow-lg rounded-2xl p-8 mb-8">
-                    <h2 className="text-2xl font-semibold mb-6 text-gray-800">
-                        📄 Upload Your Resume
-                    </h2>
-
-                    <div className="flex flex-col md:flex-row gap-4 items-center">
-                        <input
-                            type="file"
-                            accept=".pdf,.doc,.docx"
-                            onChange={handleFileChange}
-                            className="flex-1 border-2 border-gray-300 rounded-lg p-3 focus:border-blue-500 focus:outline-none"
-                        />
-
-                        <button
-                            onClick={handleUpload}
-                            disabled={loading}
-                            className="px-8 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 transition-all shadow-md"
-                        >
-                            {loading ? "🔄 Analyzing..." : "🚀 Analyze Resume"}
-                        </button>
-                    </div>
-
-                    {message && (
-                        <p className="mt-4 text-center text-sm font-semibold text-green-600">
-                            {message}
-                        </p>
-                    )}
-                </div>
-
-                {/* Analysis Section */}
-                {analysis && (
-                    <div className="bg-white shadow-lg rounded-2xl p-8 mb-8">
-                        <h3 className="text-2xl font-semibold mb-6 text-gray-800">
-                            🤖 AI Analysis
-                        </h3>
-                        
-                        <div className="grid md:grid-cols-2 gap-6">
-                            <div className="bg-blue-50 rounded-lg p-4">
-                                <h4 className="font-semibold text-blue-900 mb-2">📋 Primary Roles</h4>
-                                <p className="text-gray-700">{analysis.primary_roles.join(", ")}</p>
-                            </div>
-
-                            <div className="bg-purple-50 rounded-lg p-4">
-                                <h4 className="font-semibold text-purple-900 mb-2">💼 Experience</h4>
-                                <p className="text-gray-700">{analysis.experience_level} ({analysis.experience_years} years)</p>
-                            </div>
-
-                            <div className="bg-green-50 rounded-lg p-4">
-                                <h4 className="font-semibold text-green-900 mb-2">💻 Languages</h4>
-                                <p className="text-gray-700">{analysis.programming_languages.join(", ") || "Not specified"}</p>
-                            </div>
-
-                            <div className="bg-orange-50 rounded-lg p-4">
-                                <h4 className="font-semibold text-orange-900 mb-2">🛠️ Frameworks</h4>
-                                <p className="text-gray-700">{analysis.frameworks.join(", ") || "Not specified"}</p>
-                            </div>
-
-                            <div className="bg-pink-50 rounded-lg p-4 md:col-span-2">
-                                <h4 className="font-semibold text-pink-900 mb-2">🔍 Job Keywords ({analysis.job_keywords.length})</h4>
-                                <div className="flex flex-wrap gap-2 mt-2">
-                                    {analysis.job_keywords.map((keyword, idx) => (
-                                        <span key={idx} className="bg-pink-200 text-pink-900 px-3 py-1 rounded-full text-sm font-medium">
-                                            {keyword}
-                                        </span>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Jobs Section */}
-                {loadingJobs && (
-                    <div className="text-center py-12">
-                        <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-                        <p className="mt-4 text-gray-600 font-medium">🔍 Searching for matching jobs...</p>
-                    </div>
-                )}
-
-                {!loadingJobs && jobs.length > 0 && (
-                    <div id="jobs-section" className="bg-white shadow-lg rounded-2xl p-8">
-                        <div className="flex justify-between items-center mb-6">
-                            <h3 className="text-2xl font-semibold text-gray-800">
-                                💼 Matching Jobs {pagination && `(${pagination.total_jobs})`}
-                            </h3>
-                            <button
-                                onClick={() => fetchMatchingJobs(1)}
-                                className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors font-medium"
-                            >
-                                🔄 Refresh
-                            </button>
-                        </div>
-
-                        {/* Pagination Info */}
-                        {pagination && (
-                            <div className="mb-4 text-center text-sm text-gray-600">
-                                Page {pagination.current_page} of {pagination.total_pages} • 
-                                Showing {jobs.length} of {pagination.total_jobs} jobs
-                            </div>
-                        )}
-
-                        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {jobs.map((job, idx) => (
-                                <div
-                                    key={idx}
-                                    className="border-2 border-gray-200 rounded-xl p-6 hover:border-blue-500 hover:shadow-xl transition-all duration-300 bg-gradient-to-br from-white to-gray-50"
-                                >
-                                    {/* Company Logo & Name */}
-                                    <div className="flex items-center gap-3 mb-4">
-                                        <img
-                                            src={getCompanyLogo(job.company)}
-                                            alt={job.company}
-                                            className="w-12 h-12 rounded-lg shadow-md"
-                                        />
-                                        <div>
-                                            <h4 className="font-bold text-gray-900">{job.company}</h4>
-                                            <p className="text-xs text-gray-500">{job.source}</p>
-                                        </div>
-                                    </div>
-
-                                    {/* Job Title */}
-                                    <h5 className="font-semibold text-gray-800 mb-3 line-clamp-2 min-h-[3rem]">
-                                        {job.title}
-                                    </h5>
-
-                                    {/* Location & Department */}
-                                    <div className="space-y-2 mb-4">
-                                        <div className="flex items-center gap-2 text-sm text-gray-600">
-                                            <span>📍</span>
-                                            <span className="line-clamp-1">{job.location}</span>
-                                        </div>
-                                        {job.department !== "N/A" && (
-                                            <div className="flex items-center gap-2 text-sm text-gray-600">
-                                                <span>🏢</span>
-                                                <span className="line-clamp-1">{job.department}</span>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Apply Button */}
-                                    <a
-                                        href={job.job_url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="block w-full text-center bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold py-3 rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all shadow-md"
-                                    >
-                                        Apply Now →
-                                    </a>
-                                </div>
-                            ))}
-                        </div>
-
-                        {/* Pagination Controls */}
-                        {pagination && pagination.total_pages > 1 && (
-                            <div className="mt-8 flex justify-center items-center gap-2">
-                                {/* Previous Button */}
-                                <button
-                                    onClick={() => fetchMatchingJobs(currentPage - 1)}
-                                    disabled={!pagination.has_prev}
-                                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                                >
-                                    ← Previous
-                                </button>
-
-                                {/* Page Numbers */}
-                                <div className="flex gap-2">
-                                    {Array.from({ length: Math.min(pagination.total_pages, 10) }, (_, i) => {
-                                        const pageNum = i + 1;
-                                        
-                                        // Show first 3, last 3, and current page with neighbors
-                                        const showPage = 
-                                            pageNum <= 3 || 
-                                            pageNum > pagination.total_pages - 3 ||
-                                            Math.abs(pageNum - currentPage) <= 1;
-                                        
-                                        if (!showPage && pageNum === 4) {
-                                            return <span key={pageNum} className="px-2">...</span>;
-                                        }
-                                        
-                                        if (!showPage) return null;
-                                        
-                                        return (
-                                            <button
-                                                key={pageNum}
-                                                onClick={() => fetchMatchingJobs(pageNum)}
-                                                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                                                    currentPage === pageNum
-                                                        ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white'
-                                                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                                                }`}
-                                            >
-                                                {pageNum}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-
-                                {/* Next Button */}
-                                <button
-                                    onClick={() => fetchMatchingJobs(currentPage + 1)}
-                                    disabled={!pagination.has_next}
-                                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                                >
-                                    Next →
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {!loadingJobs && jobs.length === 0 && analysis && (
-                    <div className="bg-yellow-50 border-2 border-yellow-200 rounded-2xl p-8 text-center">
-                        <p className="text-yellow-800 font-medium">
-                            🔍 No matching jobs found. Try uploading a different resume or check back later!
-                        </p>
-                    </div>
-                )}
-            </div>
+        {/* HERO */}
+        <div className="hero">
+          <div className="hero-tag">
+            <span className="hero-tag-dot" />
+            Powered by AI Resume Analysis
+          </div>
+          <h1>Find jobs that actually <em>fit you</em></h1>
+          <p>Upload your resume and let our AI match you to thousands of curated roles — ranked by how well they align with your experience.</p>
         </div>
-    );
+
+        {/* UPLOAD */}
+        <div className="upload-wrap">
+          <div className="card upload-card">
+            <div className={`upload-zone ${file ? "has-file" : ""}`}>
+              <input type="file" accept=".pdf,.doc,.docx" onChange={handleFileChange} className="file-input" />
+              <div className="upload-icon">{file ? "✅" : "📄"}</div>
+              <div className="upload-label">{file ? "Resume ready" : "Drop your resume here"}</div>
+              {file
+                ? <div className="file-name">{file.name}</div>
+                : <div className="upload-sub">PDF, DOC or DOCX · Click or drag & drop</div>
+              }
+            </div>
+
+            <button className="btn-primary" onClick={handleUpload} disabled={loading}>
+              {loading ? (<><div className="spinner" /><span>Analysing your resume…</span></>) : (<><span>✦</span><span>Analyse &amp; Find Matches</span></>)}
+            </button>
+
+            {message.text && (
+              <div className={message.type === "error" ? "error-msg" : "success-msg"}>
+                {message.type === "error" ? "⚠ " : "✓ "}{message.text}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ANALYSIS */}
+        {analysis && (
+          <div className="section-wrap">
+            <div className="section-title">
+              <span>✦</span> Resume Insights
+            </div>
+            <div className="card analysis-card">
+              <div className="analysis-grid">
+                <div className="analysis-chip">
+                  <div className="analysis-chip-label">Primary Roles</div>
+                  <div className="analysis-chip-value">{analysis.primary_roles.join(", ")}</div>
+                </div>
+                <div className="analysis-chip">
+                  <div className="analysis-chip-label">Experience</div>
+                  <div className="analysis-chip-value">{analysis.experience_level} · {analysis.experience_years}y</div>
+                </div>
+                <div className="analysis-chip">
+                  <div className="analysis-chip-label">Languages</div>
+                  <div className="analysis-chip-value">{analysis.programming_languages.join(", ") || "—"}</div>
+                </div>
+                <div className="analysis-chip">
+                  <div className="analysis-chip-label">Frameworks</div>
+                  <div className="analysis-chip-value">{analysis.frameworks.join(", ") || "—"}</div>
+                </div>
+                <div className="analysis-chip wide">
+                  <div className="analysis-chip-label">Keywords ({analysis.job_keywords.length})</div>
+                  <div className="keyword-cloud">
+                    {analysis.job_keywords.map((k, i) => <span key={i} className="kw-tag">{k}</span>)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* JOBS */}
+        {(loadingJobs || jobs.length > 0 || (analysis && !loadingJobs)) && (
+          <div className="section-wrap" id="jobs-section">
+
+            {loadingJobs && (
+              <div className="loading-state">
+                <div className="loading-dots">
+                  <div className="loading-dot" /><div className="loading-dot" /><div className="loading-dot" />
+                </div>
+                <div className="loading-text">Searching for your best matches…</div>
+              </div>
+            )}
+
+            {!loadingJobs && jobs.length > 0 && (
+              <>
+                <div className="jobs-header">
+                  <div className="section-title" style={{ marginBottom: 0 }}>
+                    <span>◈</span> Matched Roles {pagination && <span style={{ fontWeight: 400, fontSize: "1rem", color: "#aaa" }}>({pagination.total_jobs})</span>}
+                  </div>
+                  <button className="btn-ghost" onClick={() => fetchMatchingJobs(1)}>
+                    <span style={{ fontSize: "0.9rem" }}>↻</span> Refresh
+                  </button>
+                </div>
+
+                {pagination && (
+                  <div className="jobs-meta">
+                    Page {pagination.current_page} of {pagination.total_pages} · Showing {jobs.length} results · Sorted by match score
+                  </div>
+                )}
+
+                {scoreDistribution && (
+                  <div className="dist-strip">
+                    <div className="dist-item"><div className="dist-num green">{scoreDistribution.excellent}</div><div className="dist-label">90–100%</div></div>
+                    <div className="dist-item"><div className="dist-num blue">{scoreDistribution.great}</div><div className="dist-label">80–89%</div></div>
+                    <div className="dist-item"><div className="dist-num yellow">{scoreDistribution.good}</div><div className="dist-label">70–79%</div></div>
+                    <div className="dist-item"><div className="dist-num orange">{scoreDistribution.fair}</div><div className="dist-label">60–69%</div></div>
+                    <div className="dist-item"><div className="dist-num gray">{scoreDistribution.low}</div><div className="dist-label">&lt;60%</div></div>
+                  </div>
+                )}
+
+                <div className="jobs-grid">
+                  {jobs.map((job, idx) => (
+                    <div key={idx} className="job-card">
+                      <div className="job-card-top">
+                        <div className="company-row">
+                          <img src={getCompanyLogo(job.company)} alt={job.company} className="company-logo" />
+                          <div>
+                            <div className="company-name">{job.company}</div>
+                            <div className="company-source">{job.source}</div>
+                          </div>
+                        </div>
+                        <span className={`score-badge ${getScoreClass(job.match_score)}`}>
+                          {job.match_score}% · {getScoreLabel(job.match_score)}
+                        </span>
+                      </div>
+
+                      <div className="job-title">{job.title}</div>
+
+                      <div className="job-meta">
+                        <div className="job-meta-row"><span className="meta-icon">📍</span><span>{job.location}</span></div>
+                        {job.department && job.department !== "N/A" && (
+                          <div className="job-meta-row"><span className="meta-icon">🏢</span><span>{job.department}</span></div>
+                        )}
+                      </div>
+
+                      <a href={job.job_url} target="_blank" rel="noopener noreferrer" className="btn-apply">
+                        Apply Now →
+                      </a>
+                    </div>
+                  ))}
+                </div>
+
+                {pagination && pagination.total_pages > 1 && (
+                  <div className="pagination">
+                    <button className="page-btn wide" disabled={!pagination.has_prev} onClick={() => fetchMatchingJobs(currentPage - 1)}>← Prev</button>
+                    {renderPageNumbers()}
+                    <button className="page-btn wide" disabled={!pagination.has_next} onClick={() => fetchMatchingJobs(currentPage + 1)}>Next →</button>
+                  </div>
+                )}
+              </>
+            )}
+
+            {!loadingJobs && jobs.length === 0 && analysis && (
+              <div className="card empty-state">
+                <div className="empty-icon">🔍</div>
+                <div className="empty-text">No matching jobs found right now. Try uploading a different resume or check back later.</div>
+              </div>
+            )}
+          </div>
+        )}
+
+      </div>
+    </>
+  );
 }

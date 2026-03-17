@@ -1,6 +1,7 @@
 const { extractTextFromPDF } = require("../services/pdfService");
 const { analyzeResumeWithOllama } = require("../services/ollamaService");
 const { searchGreenhouseJobs } = require("../services/jobMatchingService");
+const { scoreAndSortJobs } = require("../services/jobScoringService");
 
 // Store last analyzed resume data (in production, use database)
 let lastAnalyzedResume = null;
@@ -86,12 +87,28 @@ const getMatchingJobs = async (req, res) => {
     // Search for jobs using greenhouse matcher (gets all jobs)
     const allJobs = await searchGreenhouseJobs(job_keywords, primary_roles);
 
+    console.log(`📊 Found ${allJobs.length} jobs, now scoring...`);
+
+    // Score and sort jobs (fast rule-based, no AI)
+    const scoredJobs = scoreAndSortJobs(allJobs, lastAnalyzedResume.analysis);
+
+    console.log(`✅ Jobs scored. Top match: ${scoredJobs[0]?.match_score}%`);
+
     // Calculate pagination
-    const totalJobs = allJobs.length;
+    const totalJobs = scoredJobs.length;
     const totalPages = Math.ceil(totalJobs / limit);
     const startIndex = (page - 1) * limit;
     const endIndex = startIndex + limit;
-    const paginatedJobs = allJobs.slice(startIndex, endIndex);
+    const paginatedJobs = scoredJobs.slice(startIndex, endIndex);
+
+    // Calculate score distribution
+    const scoreRanges = {
+      excellent: scoredJobs.filter(j => j.match_score >= 90).length,
+      great: scoredJobs.filter(j => j.match_score >= 80 && j.match_score < 90).length,
+      good: scoredJobs.filter(j => j.match_score >= 70 && j.match_score < 80).length,
+      fair: scoredJobs.filter(j => j.match_score >= 60 && j.match_score < 70).length,
+      low: scoredJobs.filter(j => j.match_score < 60).length
+    };
 
     res.json({
       message: "Jobs retrieved successfully",
@@ -103,6 +120,7 @@ const getMatchingJobs = async (req, res) => {
         has_next: page < totalPages,
         has_prev: page > 1
       },
+      score_distribution: scoreRanges,
       jobs: paginatedJobs,
       search_criteria: {
         job_keywords,
