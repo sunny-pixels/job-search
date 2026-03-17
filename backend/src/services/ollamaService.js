@@ -1,140 +1,153 @@
 const axios = require("axios");
 const config = require("../config/config");
 
-const techTerms = [
-  'javascript', 'typescript', 'python', 'java', 'react', 'node.js', 'express',
-  'mongodb', 'postgresql', 'mysql', 'git', 'docker', 'aws', 'azure', 'gcp',
-  'html', 'css', 'sass', 'tailwind', 'bootstrap', 'vue', 'angular', 'next.js',
-  'mern', 'mean', 'lamp', 'api', 'rest', 'graphql', 'jwt', 'oauth', 'sql',
-  'nosql', 'redis', 'nginx', 'apache', 'linux', 'ubuntu', 'centos', 'webpack',
-  'vite', 'babel', 'eslint', 'prettier', 'jest', 'cypress', 'selenium'
-];
-
-const filterJobKeywords = (keywords) => {
-  if (!Array.isArray(keywords)) return [];
-  return keywords.filter(keyword => {
-    const lower = keyword.toLowerCase();
-    const isTechTerm = techTerms.some(tech => lower.includes(tech));
-    const isJobTitle = lower.includes('developer') || lower.includes('engineer') ||
-      lower.includes('analyst') || lower.includes('manager') ||
-      lower.includes('architect') || lower.includes('lead') ||
-      lower.includes('senior') || lower.includes('junior') ||
-      lower.includes('intern') || lower.includes('specialist');
-    return !isTechTerm && isJobTitle;
+/**
+ * Get embedding vector for a text using Ollama nomic-embed-text
+ */
+const getEmbedding = async (text) => {
+  const response = await axios.post(`${config.OLLAMA_URL}/api/embeddings`, {
+    model: "nomic-embed-text",
+    prompt: text.substring(0, 1000)
   });
+  return response.data.embedding;
 };
 
-const analyzeResumeWithOllama = async (resumeText) => {
-  const prompt = `Extract from this resume and return ONLY JSON:
+/**
+ * Cosine similarity between two vectors
+ */
+const cosineSimilarity = (a, b) => {
+  let dot = 0, normA = 0, normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+};
 
-{
-  "primary_roles": ["actual job titles only"],
-  "skills": ["technical skills"],
-  "job_keywords": ["job titles for job searching"],
-  "experience_level": "Junior/Mid/Senior/Intern",
-  "experience_years": 0,
-  "programming_languages": ["languages only"],
-  "frameworks": ["frameworks only"],
-  "tools": ["tools only"],
-  "summary": "brief professional summary",
-  "education": ["degrees and institutions"],
-  "projects": ["key project names or types"],
-  "internships": ["internship companies or roles"]
-}
+/**
+ * Build a compact resume text for embedding
+ */
+const buildResumeEmbedText = (analysis) => {
+  const parts = [
+    analysis.primary_roles?.join(", "),
+    analysis.skills?.join(", "),
+    analysis.programming_languages?.join(", "),
+    analysis.frameworks?.join(", "),
+    analysis.tools?.join(", "),
+    analysis.summary,
+    `Experience: ${analysis.experience_level}, ${analysis.experience_years} years`
+  ].filter(Boolean);
+  return parts.join(". ");
+};
 
-CRITICAL RULES:
-- job_keywords: ONLY job titles like "Full-Stack Developer", "Software Engineer" - NO technologies
-- skills: Technical abilities like "API Development", "Database Design"
-- programming_languages: ONLY languages like "JavaScript", "Python"
-- frameworks: ONLY frameworks like "React", "Express", "Node.js"
-- tools: ONLY tools like "Git", "Docker", "MongoDB"
-- education: must be strings (e.g. "B.Tech Computer Science, XYZ University")
+/**
+ * Build a compact job text for embedding
+ */
+const buildJobEmbedText = (job) => {
+  return [job.title, job.department, job.company, job.location]
+    .filter(Boolean).join(", ");
+};
 
-Resume:
-${resumeText.substring(0, 3000)}
+/**
+ * Score and sort jobs using semantic embeddings + rule-based boost
+ * Returns top 50-100 jobs sorted by score descending
+ */
+const scoreAndSortJobsWithEmbeddings = async (jobs, resumeAnalysis) => {
+  console.log(`🧠 Embedding-based scoring for ${jobs.length} jobs...`);
 
-JSON:`;
+  let resumeEmbedding = null;
+  let useEmbeddings = true;
 
   try {
-    const response = await axios.post(`${config.OLLAMA_URL}/api/generate`, {
-      model: config.OLLAMA_MODEL,
-      prompt: prompt,
-      stream: false,
-      options: {
-        temperature: 0.1,
-        num_predict: 500,
-        top_k: 10,
-        top_p: 0.9
-      }
-    });
-
-    let aiResponse = response.data.response.trim();
-
-    console.log("=== RAW OLLAMA RESPONSE ===");
-    console.log(aiResponse);
-    console.log("===========================");
-
-    let parsedData = null;
-    try {
-      parsedData = JSON.parse(aiResponse);
-    } catch (e) {
-      const codeBlockMatch = aiResponse.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-      if (codeBlockMatch) {
-        parsedData = JSON.parse(codeBlockMatch[1]);
-      } else {
-        const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
-        if (jsonMatch) parsedData = JSON.parse(jsonMatch[0]);
-      }
-    }
-
-    if (!parsedData) throw new Error("Could not extract JSON from Ollama response");
-
-    const validatedData = {
-      primary_roles: Array.isArray(parsedData.primary_roles) && parsedData.primary_roles.length > 0
-        ? parsedData.primary_roles : ["Full-Stack Developer"],
-      skills: Array.isArray(parsedData.skills) ? parsedData.skills : [],
-      job_keywords: filterJobKeywords(parsedData.job_keywords),
-      experience_level: ["Intern", "Junior", "Mid", "Senior"].includes(parsedData.experience_level)
-        ? parsedData.experience_level : "Junior",
-      experience_years: parseInt(parsedData.experience_years) || 0,
-      programming_languages: Array.isArray(parsedData.programming_languages) ? parsedData.programming_languages : [],
-      frameworks: Array.isArray(parsedData.frameworks) ? parsedData.frameworks : [],
-      tools: Array.isArray(parsedData.tools) ? parsedData.tools : [],
-      summary: typeof parsedData.summary === 'string' ? parsedData.summary : "",
-      education: Array.isArray(parsedData.education) ? parsedData.education.map(e => String(e)) : [],
-      projects: Array.isArray(parsedData.projects) ? parsedData.projects : [],
-      internships: Array.isArray(parsedData.internships) ? parsedData.internships : []
-    };
-
-    if (validatedData.job_keywords.length < 3) {
-      const jobTitles = new Set(validatedData.job_keywords);
-      validatedData.primary_roles.forEach(role => {
-        const r = role.toLowerCase();
-        if (r.includes('full')) {
-          jobTitles.add("Full-Stack Developer");
-          jobTitles.add("Software Engineer");
-          jobTitles.add("Web Developer");
-        } else if (r.includes('backend') || r.includes('back-end')) {
-          jobTitles.add("Backend Developer");
-          jobTitles.add("Software Engineer");
-        } else if (r.includes('frontend') || r.includes('front-end')) {
-          jobTitles.add("Frontend Developer");
-          jobTitles.add("Web Developer");
-        } else {
-          jobTitles.add(role);
-        }
-      });
-      jobTitles.add("Software Developer");
-      jobTitles.add("Application Developer");
-      validatedData.job_keywords = Array.from(jobTitles).slice(0, 8);
-    }
-
-    return validatedData;
-
-  } catch (error) {
-    console.error("Error analyzing resume with Ollama:", error.message);
-    throw error;
+    const resumeText = buildResumeEmbedText(resumeAnalysis);
+    resumeEmbedding = await getEmbedding(resumeText);
+  } catch (err) {
+    console.warn("⚠️  Ollama embedding unavailable, falling back to rule-based scoring:", err.message);
+    useEmbeddings = false;
   }
+
+  const primaryRoles = (resumeAnalysis.primary_roles || []).map(r => String(r).toLowerCase());
+  const jobKeywords = (resumeAnalysis.job_keywords || []).map(k => String(k).toLowerCase());
+  const skills = (resumeAnalysis.skills || []).map(s => String(s).toLowerCase());
+  const languages = (resumeAnalysis.programming_languages || []).map(l => String(l).toLowerCase());
+  const frameworks = (resumeAnalysis.frameworks || []).map(f => String(f).toLowerCase());
+  const tools = (resumeAnalysis.tools || []).map(t => String(t).toLowerCase());
+  const allTerms = [...primaryRoles, ...jobKeywords, ...skills, ...languages, ...frameworks, ...tools];
+
+  // Score all jobs
+  const scoredJobs = await Promise.all(jobs.map(async (job) => {
+    const jobTitle = job.title.toLowerCase();
+    const jobDept = (job.department || "").toLowerCase();
+
+    // --- Semantic score (0-60) ---
+    let semanticScore = 0;
+    if (useEmbeddings && resumeEmbedding) {
+      try {
+        const jobText = buildJobEmbedText(job);
+        const jobEmbedding = await getEmbedding(jobText);
+        const similarity = cosineSimilarity(resumeEmbedding, jobEmbedding);
+        semanticScore = Math.round(similarity * 60); // scale to 0-60
+      } catch {
+        useEmbeddings = false; // stop trying if it keeps failing
+      }
+    }
+
+    // --- Rule-based boost (0-40) ---
+    let boost = 0;
+
+    // Title match (0-20)
+    let titleMatch = 0;
+    for (const term of [...primaryRoles, ...jobKeywords]) {
+      const words = term.split(/[\s\-]/);
+      const matched = words.filter(w => w.length > 3 && jobTitle.includes(w)).length;
+      const ratio = matched / words.length;
+      if (ratio >= 0.8) { titleMatch = 20; break; }
+      else if (ratio >= 0.5) titleMatch = Math.max(titleMatch, 14);
+      else if (ratio > 0) titleMatch = Math.max(titleMatch, 7);
+    }
+    boost += titleMatch;
+
+    // Tech stack match (0-12)
+    const techTermsLocal = [...skills, ...languages, ...frameworks, ...tools];
+    let techHits = 0;
+    for (const tech of techTermsLocal) {
+      const words = tech.split(/[\s\-\.]/);
+      if (words.some(w => w.length > 2 && (jobTitle.includes(w) || jobDept.includes(w)))) {
+        techHits++;
+      }
+    }
+    boost += techTermsLocal.length > 0 ? Math.min(12, Math.round((techHits / techTermsLocal.length) * 12)) : 6;
+
+    // Experience level match (0-8)
+    const expLevel = (resumeAnalysis.experience_level || "").toLowerCase();
+    const expYears = resumeAnalysis.experience_years || 0;
+    if (jobTitle.includes('senior') || jobTitle.includes('lead') || jobTitle.includes('principal')) {
+      boost += (expLevel === 'senior' || expYears >= 5) ? 8 : expYears >= 3 ? 5 : 2;
+    } else if (jobTitle.includes('junior') || jobTitle.includes('associate') || jobTitle.includes('entry')) {
+      boost += (expLevel === 'junior' || expYears <= 2) ? 8 : 5;
+    } else if (jobTitle.includes('intern')) {
+      boost += (expLevel === 'intern' || expYears === 0) ? 8 : 3;
+    } else {
+      boost += expYears >= 2 ? 7 : 5;
+    }
+
+    // If embeddings not available, use rule-based only (scale to 100)
+    const finalScore = useEmbeddings
+      ? Math.min(100, semanticScore + boost)
+      : Math.min(100, Math.round((boost / 40) * 100));
+
+    return { ...job, match_score: finalScore };
+  }));
+
+  // Sort descending by score
+  scoredJobs.sort((a, b) => b.match_score - a.match_score);
+
+  // Return top 100, but only jobs with score >= 30 (filter noise)
+  const filtered = scoredJobs.filter(j => j.match_score >= 30).slice(0, 100);
+
+  console.log(`✅ Scoring done. Returning ${filtered.length} jobs. Top: ${filtered[0]?.match_score}%`);
+  return filtered;
 };
 
-module.exports = { analyzeResumeWithOllama };
+module.exports = { scoreAndSortJobsWithEmbeddings };

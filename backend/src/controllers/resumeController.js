@@ -1,35 +1,25 @@
 const { extractTextFromPDF } = require("../services/pdfService");
-const { analyzeResumeWithOllama } = require("../services/ollamaService");
+const { analyzeResumeWithGroq } = require("../services/groqService");
 const { searchGreenhouseJobs } = require("../services/jobMatchingService");
-const { scoreAndSortJobs } = require("../services/jobScoringService");
+const { scoreAndSortJobsWithEmbeddings } = require("../services/ollamaService");
 
-// Store last analyzed resume data (in production, use database)
+// In-memory store (replace with DB in production)
 let lastAnalyzedResume = null;
 
 const uploadResume = async (req, res) => {
   try {
-    console.log("POST /api/resume/upload called");
+    if (!req.file) return res.status(400).json({ message: "No file uploaded" });
 
-    if (!req.file) {
-      return res.status(400).json({ message: "No file uploaded" });
-    }
-
-    // Extract text from PDF
+    console.log("📄 Extracting text from PDF...");
     const resumeText = await extractTextFromPDF(req.file.buffer);
-    console.log("Resume text extracted");
-    console.log("=== EXTRACTED TEXT ===");
-    console.log(resumeText.substring(0, 500));
-    console.log("======================");
 
-    // Analyze with Ollama
-    console.log("Sending to Ollama for analysis...");
-    const analysisData = await analyzeResumeWithOllama(resumeText);
+    console.log("🤖 Analyzing resume with Groq...");
+    const analysisData = await analyzeResumeWithGroq(resumeText);
 
-    console.log("=== AI ANALYSIS (JSON) ===");
+    console.log("=== GROQ ANALYSIS ===");
     console.log(JSON.stringify(analysisData, null, 2));
-    console.log("==========================");
+    console.log("=====================");
 
-    // Store the analyzed data
     lastAnalyzedResume = {
       filename: req.file.originalname,
       uploadedAt: new Date().toISOString(),
@@ -44,64 +34,43 @@ const uploadResume = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Error details:", error.message);
-    res.status(500).json({
-      message: "Error analyzing resume",
-      error: error.message
-    });
+    console.error("Upload error:", error.message);
+    res.status(500).json({ message: "Error analyzing resume", error: error.message });
   }
 };
 
 const getResumeData = (req, res) => {
   if (!lastAnalyzedResume) {
-    return res.status(404).json({ 
-      message: "No resume uploaded yet. Please upload a resume first." 
-    });
+    return res.status(404).json({ message: "No resume uploaded yet." });
   }
-
-  res.json({
-    message: "Resume data retrieved successfully",
-    data: lastAnalyzedResume
-  });
+  res.json({ message: "Resume data retrieved", data: lastAnalyzedResume });
 };
 
 const getMatchingJobs = async (req, res) => {
   try {
     if (!lastAnalyzedResume) {
-      return res.status(404).json({ 
-        message: "No resume uploaded yet. Please upload a resume first." 
-      });
+      return res.status(404).json({ message: "No resume uploaded yet." });
     }
 
     const { job_keywords, primary_roles } = lastAnalyzedResume.analysis;
-
-    // Get pagination parameters from query string
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 12; // 12 jobs per page for nice grid layout
+    const limit = parseInt(req.query.limit) || 12;
 
-    console.log("🔍 Searching for matching jobs...");
-    console.log("Job Keywords:", job_keywords);
-    console.log("Primary Roles:", primary_roles);
-    console.log(`📄 Page: ${page}, Limit: ${limit}`);
+    console.log("🔍 Fetching jobs for:", job_keywords);
 
-    // Search for jobs using greenhouse matcher (gets all jobs)
+    // Fetch jobs and score them in parallel where possible
     const allJobs = await searchGreenhouseJobs(job_keywords, primary_roles);
+    console.log(`📊 Found ${allJobs.length} raw jobs, scoring...`);
 
-    console.log(`📊 Found ${allJobs.length} jobs, now scoring...`);
+    // Score with embeddings (falls back to rule-based if Ollama unavailable)
+    const scoredJobs = await scoreAndSortJobsWithEmbeddings(allJobs, lastAnalyzedResume.analysis);
 
-    // Score and sort jobs (fast rule-based, no AI)
-    const scoredJobs = scoreAndSortJobs(allJobs, lastAnalyzedResume.analysis);
-
-    console.log(`✅ Jobs scored. Top match: ${scoredJobs[0]?.match_score}%`);
-
-    // Calculate pagination
+    // Paginate
     const totalJobs = scoredJobs.length;
     const totalPages = Math.ceil(totalJobs / limit);
     const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + limit;
-    const paginatedJobs = scoredJobs.slice(startIndex, endIndex);
+    const paginatedJobs = scoredJobs.slice(startIndex, startIndex + limit);
 
-    // Calculate score distribution
     const scoreRanges = {
       excellent: scoredJobs.filter(j => j.match_score >= 90).length,
       great: scoredJobs.filter(j => j.match_score >= 80 && j.match_score < 90).length,
@@ -122,23 +91,13 @@ const getMatchingJobs = async (req, res) => {
       },
       score_distribution: scoreRanges,
       jobs: paginatedJobs,
-      search_criteria: {
-        job_keywords,
-        primary_roles
-      }
+      search_criteria: { job_keywords, primary_roles }
     });
 
   } catch (error) {
-    console.error("Error fetching jobs:", error.message);
-    res.status(500).json({
-      message: "Error fetching matching jobs",
-      error: error.message
-    });
+    console.error("Jobs error:", error.message);
+    res.status(500).json({ message: "Error fetching jobs", error: error.message });
   }
 };
 
-module.exports = {
-  uploadResume,
-  getResumeData,
-  getMatchingJobs
-};
+module.exports = { uploadResume, getResumeData, getMatchingJobs };

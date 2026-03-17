@@ -135,8 +135,8 @@ def main():
         
         keywords = json.loads(sys.argv[1])
         
-        # Search for jobs (increased limit to get more results)
-        jobs = search_jobs_by_keywords(keywords, max_jobs=500)
+        # Fetch enough jobs to score and filter down to top 100
+        jobs = search_jobs_by_keywords(keywords, max_jobs=200)
         
         # Output as JSON
         print(json.dumps(jobs))
