@@ -1,6 +1,6 @@
 const { extractTextFromPDF } = require("../services/pdfService");
 const { analyzeResumeWithGroq } = require("../services/groqService");
-const { searchGreenhouseJobs } = require("../services/jobMatchingService");
+const { fetchAllJobs } = require("../services/jobMatchingService");
 const { scoreAndSortJobsWithEmbeddings } = require("../services/ollamaService");
 
 // In-memory store (replace with DB in production)
@@ -56,11 +56,11 @@ const getMatchingJobs = async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 12;
 
-    console.log("🔍 Fetching jobs for:", job_keywords);
+    console.log("🔍 Fetching jobs from JobSpy + Greenhouse...");
 
-    // Fetch jobs and score them in parallel where possible
-    const allJobs = await searchGreenhouseJobs(job_keywords, primary_roles);
-    console.log(`📊 Found ${allJobs.length} raw jobs, scoring...`);
+    // Fetch from both sources in parallel — JobSpy first priority
+    const allJobs = await fetchAllJobs(job_keywords, primary_roles);
+    console.log(`📊 Found ${allJobs.length} total jobs, scoring...`);
 
     // Score with embeddings (falls back to rule-based if Ollama unavailable)
     const scoredJobs = await scoreAndSortJobsWithEmbeddings(allJobs, lastAnalyzedResume.analysis);

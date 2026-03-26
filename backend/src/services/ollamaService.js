@@ -238,8 +238,13 @@ const scoreAndSortJobsWithEmbeddings = async (jobs, resumeAnalysis) => {
     return { ...job, match_score: finalScore };
   }));
 
-  // Sort descending, return top 100 with score >= 35
-  scoredJobs.sort((a, b) => b.match_score - a.match_score);
+  // Sort: source first (jobspy before greenhouse), then by score desc within each group
+  scoredJobs.sort((a, b) => {
+    const aIsJobSpy = a.source_type === 'jobspy' ? 0 : 1;
+    const bIsJobSpy = b.source_type === 'jobspy' ? 0 : 1;
+    if (aIsJobSpy !== bIsJobSpy) return aIsJobSpy - bIsJobSpy;
+    return b.match_score - a.match_score;
+  });
   const result = scoredJobs.filter(j => j.match_score >= 35).slice(0, 100);
 
   console.log(`🎯 Final: ${result.length} jobs. Top score: ${result[0]?.match_score}%`);

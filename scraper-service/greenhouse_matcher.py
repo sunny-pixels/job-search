@@ -145,10 +145,14 @@ def main():
 
         keywords = json.loads(sys.argv[1])
         jobs = search_jobs_by_keywords(keywords, max_jobs=150)
+        print("__JSON_START__")
         print(json.dumps(jobs))
+        print("__JSON_END__")
 
     except Exception:
+        print("__JSON_START__")
         print(json.dumps([]))
+        print("__JSON_END__")
         sys.exit(1)
 
 if __name__ == "__main__":
