@@ -1,9 +1,6 @@
 const axios = require("axios");
 const config = require("../config/config");
 
-/**
- * Get embedding vector for a text using Ollama nomic-embed-text
- */
 const getEmbedding = async (text) => {
   const response = await axios.post(`${config.OLLAMA_URL}/api/embeddings`, {
     model: "nomic-embed-text",
@@ -12,9 +9,6 @@ const getEmbedding = async (text) => {
   return response.data.embedding;
 };
 
-/**
- * Cosine similarity between two vectors
- */
 const cosineSimilarity = (a, b) => {
   let dot = 0, normA = 0, normB = 0;
   for (let i = 0; i < a.length; i++) {
@@ -25,11 +19,8 @@ const cosineSimilarity = (a, b) => {
   return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 };
 
-/**
- * Build a compact resume text for embedding
- */
 const buildResumeEmbedText = (analysis) => {
-  const parts = [
+  return [
     analysis.primary_roles?.join(", "),
     analysis.skills?.join(", "),
     analysis.programming_languages?.join(", "),
@@ -37,117 +28,222 @@ const buildResumeEmbedText = (analysis) => {
     analysis.tools?.join(", "),
     analysis.summary,
     `Experience: ${analysis.experience_level}, ${analysis.experience_years} years`
-  ].filter(Boolean);
-  return parts.join(". ");
+  ].filter(Boolean).join(". ");
 };
 
-/**
- * Build a compact job text for embedding
- */
 const buildJobEmbedText = (job) => {
-  return [job.title, job.department, job.company, job.location]
-    .filter(Boolean).join(", ");
+  if (job.description && job.description.length > 100) {
+    const header = [job.title, job.department, job.company].filter(Boolean).join(", ");
+    return `${header}. ${job.description.substring(0, 1000)}`;
+  }
+  return [job.title, job.department, job.company, job.location].filter(Boolean).join(", ");
+};
+
+/** Extract minimum YOE required from job title + description */
+const extractRequiredYOE = (job) => {
+  const text = `${job.title} ${job.description || ""}`.toLowerCase();
+
+  const patterns = [
+    /(\d+)\s*\+\s*(?:yoe|years?(?:\s+of)?\s+(?:experience|exp))/i,
+    /(\d+)\s*[-–]\s*\d+\s*(?:yoe|years?(?:\s+of)?\s+(?:experience|exp))/i,
+    /(?:minimum|at\s+least|requires?)\s+(\d+)\s*\+?\s*years?/i,
+    /(\d+)\s*\+?\s*years?\s+(?:of\s+)?(?:professional\s+)?experience/i,
+  ];
+
+  for (const p of patterns) {
+    const m = text.match(p);
+    if (m) return parseInt(m[1]);
+  }
+
+  const title = job.title.toLowerCase();
+  if (title.includes('staff') || title.includes('principal')) return 7;
+  if (title.includes('senior') || title.includes('lead')) return 4;
+  if (title.includes(' ii') || title.includes('ii ') || title.includes('mid-level')) return 2;
+  if (title.includes('junior') || title.includes('associate') || title.includes('entry')) return 0;
+  if (title.includes('intern')) return 0;
+
+  return null;
 };
 
 /**
- * Score and sort jobs using semantic embeddings + rule-based boost
- * Returns top 50-100 jobs sorted by score descending
+ * AND GATE — all conditions must pass for a job to be shown.
+ * Returns { pass: bool, reasons: string[] }
  */
-const scoreAndSortJobsWithEmbeddings = async (jobs, resumeAnalysis) => {
-  console.log(`🧠 Embedding-based scoring for ${jobs.length} jobs...`);
+const andGateCheck = (job, resumeAnalysis) => {
+  const jobTitle = job.title.toLowerCase();
+  const jobDesc = (job.description || "").toLowerCase();
+  const jobText = `${jobTitle} ${jobDesc}`;
 
+  const expYears = resumeAnalysis.experience_years || 0;
+  const primaryRoles = (resumeAnalysis.primary_roles || []).map(r => r.toLowerCase());
+  const jobKeywords = (resumeAnalysis.job_keywords || []).map(k => k.toLowerCase());
+  const languages = (resumeAnalysis.programming_languages || []).map(l => l.toLowerCase());
+  const frameworks = (resumeAnalysis.frameworks || []).map(f => f.toLowerCase());
+  const tools = (resumeAnalysis.tools || []).map(t => t.toLowerCase());
+  const skills = (resumeAnalysis.skills || []).map(s => s.toLowerCase());
+
+  // CONDITION 1: Experience gate — candidate must meet minimum YOE
+  const requiredYOE = extractRequiredYOE(job);
+  if (requiredYOE !== null && expYears + 1 < requiredYOE) {
+    return { pass: false, reason: `requires ${requiredYOE} YOE, candidate has ${expYears}` };
+  }
+
+  // CONDITION 2: Primary role must match job title — strict domain check
+  // Extract meaningful domain words from primary roles and keywords
+  // Filter out generic words that match too broadly
+  const stopWords = new Set([
+    'intern', 'senior', 'junior', 'lead', 'manager', 'associate', 'staff',
+    'principal', 'entry', 'level', 'role', 'position', 'job', 'and', 'the',
+    'with', 'for', 'new', 'grad', 'graduate'
+  ]);
+
+  const getDomainWords = (terms) => {
+    const words = new Set();
+    terms.forEach(term => {
+      term.split(/[\s\-&\/]/).forEach(w => {
+        const clean = w.toLowerCase().replace(/[^a-z]/g, '');
+        if (clean.length > 3 && !stopWords.has(clean)) {
+          words.add(clean);
+        }
+      });
+    });
+    return words;
+  };
+
+  const domainWords = getDomainWords([...primaryRoles, ...jobKeywords]);
+
+  // Job title must contain at least one domain word from the candidate's profile
+  const titleMatchesDomain = [...domainWords].some(word => jobTitle.includes(word));
+
+  if (!titleMatchesDomain) {
+    return { pass: false, reason: `job title "${job.title}" doesn't match candidate domain` };
+  }
+
+  // CONDITION 3: At least one tech term (language/framework/tool/skill) must appear in JD
+  const allTech = [...new Set([...languages, ...frameworks, ...tools, ...skills])];
+  const techMatch = allTech.some(tech => {
+    const words = tech.split(/[\s\-\.]/);
+    return words.some(w => w.length > 2 && jobText.includes(w));
+  });
+  if (!techMatch && allTech.length > 0) {
+    return { pass: false, reason: "no tech stack match in JD" };
+  }
+
+  return { pass: true };
+};
+
+const scoreAndSortJobsWithEmbeddings = async (jobs, resumeAnalysis) => {
+  console.log(`🔍 Applying AND gate to ${jobs.length} jobs...`);
+
+  // Apply AND gate — hard filter before any scoring
+  const eligibleJobs = jobs.filter(job => {
+    const result = andGateCheck(job, resumeAnalysis);
+    return result.pass;
+  });
+
+  console.log(`✅ AND gate: ${jobs.length} → ${eligibleJobs.length} eligible jobs`);
+
+  if (eligibleJobs.length === 0) {
+    console.log("⚠️  No jobs passed AND gate");
+    return [];
+  }
+
+  // Get resume embedding once
   let resumeEmbedding = null;
   let useEmbeddings = true;
-
   try {
-    const resumeText = buildResumeEmbedText(resumeAnalysis);
-    resumeEmbedding = await getEmbedding(resumeText);
+    resumeEmbedding = await getEmbedding(buildResumeEmbedText(resumeAnalysis));
   } catch (err) {
-    console.warn("⚠️  Ollama embedding unavailable, falling back to rule-based scoring:", err.message);
+    console.warn("⚠️  Ollama unavailable, using rule-based only:", err.message);
     useEmbeddings = false;
   }
 
-  const primaryRoles = (resumeAnalysis.primary_roles || []).map(r => String(r).toLowerCase());
-  const jobKeywords = (resumeAnalysis.job_keywords || []).map(k => String(k).toLowerCase());
-  const skills = (resumeAnalysis.skills || []).map(s => String(s).toLowerCase());
-  const languages = (resumeAnalysis.programming_languages || []).map(l => String(l).toLowerCase());
-  const frameworks = (resumeAnalysis.frameworks || []).map(f => String(f).toLowerCase());
-  const tools = (resumeAnalysis.tools || []).map(t => String(t).toLowerCase());
-  const allTerms = [...primaryRoles, ...jobKeywords, ...skills, ...languages, ...frameworks, ...tools];
+  const primaryRoles = (resumeAnalysis.primary_roles || []).map(r => r.toLowerCase());
+  const jobKeywords = (resumeAnalysis.job_keywords || []).map(k => k.toLowerCase());
+  const languages = (resumeAnalysis.programming_languages || []).map(l => l.toLowerCase());
+  const frameworks = (resumeAnalysis.frameworks || []).map(f => f.toLowerCase());
+  const tools = (resumeAnalysis.tools || []).map(t => t.toLowerCase());
+  const skills = (resumeAnalysis.skills || []).map(s => s.toLowerCase());
+  const techTermsAll = [...new Set([...languages, ...frameworks, ...tools, ...skills])];
+  const expYears = resumeAnalysis.experience_years || 0;
 
-  // Score all jobs
-  const scoredJobs = await Promise.all(jobs.map(async (job) => {
+  const scoredJobs = await Promise.all(eligibleJobs.map(async (job) => {
     const jobTitle = job.title.toLowerCase();
     const jobDept = (job.department || "").toLowerCase();
+    const jobDesc = (job.description || "").toLowerCase();
 
-    // --- Semantic score (0-60) ---
+    // Semantic score (0-55) — resume vs full JD embedding
     let semanticScore = 0;
     if (useEmbeddings && resumeEmbedding) {
       try {
-        const jobText = buildJobEmbedText(job);
-        const jobEmbedding = await getEmbedding(jobText);
-        const similarity = cosineSimilarity(resumeEmbedding, jobEmbedding);
-        semanticScore = Math.round(similarity * 60); // scale to 0-60
+        const jobEmbedding = await getEmbedding(buildJobEmbedText(job));
+        semanticScore = Math.round(cosineSimilarity(resumeEmbedding, jobEmbedding) * 55);
       } catch {
-        useEmbeddings = false; // stop trying if it keeps failing
+        useEmbeddings = false;
       }
     }
 
-    // --- Rule-based boost (0-40) ---
+    // Rule-based boost (0-45)
     let boost = 0;
 
-    // Title match (0-20)
-    let titleMatch = 0;
-    for (const term of [...primaryRoles, ...jobKeywords]) {
-      const words = term.split(/[\s\-]/);
-      const matched = words.filter(w => w.length > 3 && jobTitle.includes(w)).length;
-      const ratio = matched / words.length;
-      if (ratio >= 0.8) { titleMatch = 20; break; }
-      else if (ratio >= 0.5) titleMatch = Math.max(titleMatch, 14);
-      else if (ratio > 0) titleMatch = Math.max(titleMatch, 7);
-    }
-    boost += titleMatch;
+    // Title match depth (0-20) — based on domain word overlap
+    const stopWordsScore = new Set([
+      'intern', 'senior', 'junior', 'lead', 'manager', 'associate', 'staff',
+      'principal', 'entry', 'level', 'and', 'the', 'with', 'for', 'new', 'grad'
+    ]);
+    const getDomainWordsScore = (terms) => {
+      const words = new Set();
+      terms.forEach(term => {
+        term.split(/[\s\-&\/]/).forEach(w => {
+          const clean = w.toLowerCase().replace(/[^a-z]/g, '');
+          if (clean.length > 3 && !stopWordsScore.has(clean)) words.add(clean);
+        });
+      });
+      return words;
+    };
+    const candidateDomainWords = getDomainWordsScore([...primaryRoles, ...jobKeywords]);
+    const jobTitleWords = jobTitle.split(/[\s\-&\/]/).map(w => w.toLowerCase().replace(/[^a-z]/g, '')).filter(w => w.length > 3);
+    const domainMatches = jobTitleWords.filter(w => candidateDomainWords.has(w)).length;
+    const titleScore = domainMatches >= 2 ? 20 : domainMatches === 1 ? 12 : 0;
+    boost += titleScore;
 
-    // Tech stack match (0-12)
-    const techTermsLocal = [...skills, ...languages, ...frameworks, ...tools];
+    // Tech stack depth in JD (0-15)
     let techHits = 0;
-    for (const tech of techTermsLocal) {
+    for (const tech of techTermsAll) {
       const words = tech.split(/[\s\-\.]/);
-      if (words.some(w => w.length > 2 && (jobTitle.includes(w) || jobDept.includes(w)))) {
+      if (words.some(w => w.length > 2 && (jobTitle.includes(w) || jobDept.includes(w) || jobDesc.includes(w)))) {
         techHits++;
       }
     }
-    boost += techTermsLocal.length > 0 ? Math.min(12, Math.round((techHits / techTermsLocal.length) * 12)) : 6;
+    boost += techTermsAll.length > 0
+      ? Math.min(15, Math.round((techHits / techTermsAll.length) * 15))
+      : 7;
 
-    // Experience level match (0-8)
-    const expLevel = (resumeAnalysis.experience_level || "").toLowerCase();
-    const expYears = resumeAnalysis.experience_years || 0;
-    if (jobTitle.includes('senior') || jobTitle.includes('lead') || jobTitle.includes('principal')) {
-      boost += (expLevel === 'senior' || expYears >= 5) ? 8 : expYears >= 3 ? 5 : 2;
-    } else if (jobTitle.includes('junior') || jobTitle.includes('associate') || jobTitle.includes('entry')) {
-      boost += (expLevel === 'junior' || expYears <= 2) ? 8 : 5;
-    } else if (jobTitle.includes('intern')) {
-      boost += (expLevel === 'intern' || expYears === 0) ? 8 : 3;
+    // Experience alignment (0-10)
+    const requiredYOE = extractRequiredYOE(job);
+    if (requiredYOE === null) {
+      boost += 7;
+    } else if (expYears >= requiredYOE) {
+      boost += 10;
+    } else if (expYears + 1 >= requiredYOE) {
+      boost += 6;
     } else {
-      boost += expYears >= 2 ? 7 : 5;
+      boost += 2;
     }
 
-    // If embeddings not available, use rule-based only (scale to 100)
     const finalScore = useEmbeddings
       ? Math.min(100, semanticScore + boost)
-      : Math.min(100, Math.round((boost / 40) * 100));
+      : Math.min(100, Math.round((boost / 45) * 100));
 
     return { ...job, match_score: finalScore };
   }));
 
-  // Sort descending by score
+  // Sort descending, return top 100 with score >= 35
   scoredJobs.sort((a, b) => b.match_score - a.match_score);
+  const result = scoredJobs.filter(j => j.match_score >= 35).slice(0, 100);
 
-  // Return top 100, but only jobs with score >= 30 (filter noise)
-  const filtered = scoredJobs.filter(j => j.match_score >= 30).slice(0, 100);
-
-  console.log(`✅ Scoring done. Returning ${filtered.length} jobs. Top: ${filtered[0]?.match_score}%`);
-  return filtered;
+  console.log(`🎯 Final: ${result.length} jobs. Top score: ${result[0]?.match_score}%`);
+  return result;
 };
 
 module.exports = { scoreAndSortJobsWithEmbeddings };

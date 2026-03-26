@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Greenhouse Job Matcher - Searches for jobs based on resume keywords
+Greenhouse Job Matcher - Fetches jobs + full JDs for accurate scoring
 """
 
 import sys
@@ -8,74 +8,93 @@ import json
 import requests
 import time
 import random
+import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Companies using Greenhouse
 GREENHOUSE_COMPANIES = [
-    "cloudflare",
-    "stripe",
-    "airbnb",
-    "squarespace",
-    "databricks",
-    "gitlab",
-    "figma",
-    "canonical",
-    "reddit",
-    "roblox",
-    "discord",
-    "airtable",
-    "webflow",
-    "vercel",
-    "anthropic",
+    "cloudflare", "stripe", "airbnb", "squarespace", "databricks",
+    "gitlab", "figma", "canonical", "reddit", "roblox",
+    "discord", "airtable", "webflow", "vercel", "anthropic",
 ]
 
-def search_jobs_by_keywords(keywords, max_jobs=500):
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+    "Accept": "application/json",
+}
+
+def strip_html(html):
+    """Strip HTML tags and clean up whitespace"""
+    if not html:
+        return ""
+    text = re.sub(r'<[^>]+>', ' ', html)
+    text = re.sub(r'&[a-zA-Z]+;', ' ', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text[:1200]  # Keep first 1200 chars (requirements section)
+
+def fetch_full_jd(company, job_id):
+    """Fetch full job description for a single job"""
+    try:
+        url = f"https://boards-api.greenhouse.io/v1/boards/{company}/jobs/{job_id}"
+        response = requests.get(url, headers=HEADERS, timeout=8)
+        if response.status_code == 200:
+            data = response.json()
+            raw_content = data.get("content", "") or data.get("description", "")
+            return strip_html(raw_content)
+    except Exception:
+        pass
+    return ""
+
+def fetch_jds_parallel(jobs, max_workers=12):
+    """Fetch full JDs for all jobs in parallel"""
+    print(f"Fetching full JDs for {len(jobs)} jobs...", file=sys.stderr)
+
+    def fetch_one(job):
+        company_slug = job["company"].lower()
+        jd = fetch_full_jd(company_slug, job["job_id"])
+        return job["job_id"], jd
+
+    jd_map = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(fetch_one, job): job for job in jobs}
+        for future in as_completed(futures):
+            try:
+                job_id, jd = future.result()
+                jd_map[job_id] = jd
+            except Exception:
+                pass
+
+    print(f"Fetched {len(jd_map)} JDs", file=sys.stderr)
+    return jd_map
+
+def search_jobs_by_keywords(keywords, max_jobs=200):
     """
-    Search for jobs matching the given keywords across multiple companies
-    Returns mixed results from all companies (not sequential)
-    
-    Args:
-        keywords: List of job titles to search for
-        max_jobs: Maximum number of jobs to return
-    
-    Returns:
-        List of matching jobs (mixed from all companies)
+    Search for keyword-matched jobs across all companies,
+    then fetch full JDs in parallel for accurate scoring.
     """
-    
-    # Store jobs per company
     company_jobs = {}
     keywords_lower = [k.lower() for k in keywords]
-    
-    # First, collect jobs from ALL companies
+
+    # Fetch job listings from all companies
     for company in GREENHOUSE_COMPANIES:
         try:
             url = f"https://boards-api.greenhouse.io/v1/boards/{company}/jobs"
-            
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-                "Accept": "application/json",
-            }
-            
-            response = requests.get(url, headers=headers, timeout=10)
-            
+            response = requests.get(url, headers=HEADERS, timeout=10)
+
             if response.status_code == 200:
                 data = response.json()
                 jobs = data.get("jobs", [])
-                
                 company_matches = []
-                
-                # Filter jobs by keywords
+
                 for job in jobs:
                     title_lower = job.get("title", "").lower()
-                    
-                    # Check if any keyword matches the job title
                     if any(keyword in title_lower for keyword in keywords_lower):
                         location_obj = job.get("location", {})
                         location = location_obj.get("name", "N/A") if isinstance(location_obj, dict) else str(location_obj)
-                        
+
                         departments = job.get("departments", [])
                         department = ", ".join([d.get("name", "") for d in departments if d.get("name")]) if departments else "N/A"
-                        
-                        job_data = {
+
+                        company_matches.append({
                             "company": company.title(),
                             "job_id": job.get("id"),
                             "title": job.get("title", "N/A"),
@@ -83,66 +102,52 @@ def search_jobs_by_keywords(keywords, max_jobs=500):
                             "department": department,
                             "job_url": job.get("absolute_url", "N/A"),
                             "updated_at": job.get("updated_at", "N/A"),
-                            "source": "Greenhouse"
-                        }
-                        
-                        company_matches.append(job_data)
-                
+                            "source": "Greenhouse",
+                            "description": ""
+                        })
+
                 if company_matches:
                     company_jobs[company] = company_matches
-            
-            # Rate limiting
-            time.sleep(random.uniform(0.3, 0.8))
-            
-        except Exception as e:
-            # Silently continue on errors
+
+            time.sleep(random.uniform(0.2, 0.5))
+
+        except Exception:
             continue
-    
-    # Now mix jobs from all companies (round-robin style)
+
+    # Round-robin mix across companies
     mixed_jobs = []
-    max_iterations = 1000  # Safety limit
     iteration = 0
-    
-    while len(mixed_jobs) < max_jobs and iteration < max_iterations:
-        added_in_round = False
-        
-        # Take one job from each company in rotation
+    while len(mixed_jobs) < max_jobs and iteration < 1000:
+        added = False
         for company in GREENHOUSE_COMPANIES:
-            if company in company_jobs and len(company_jobs[company]) > 0:
-                # Take the first job from this company
-                job = company_jobs[company].pop(0)
-                mixed_jobs.append(job)
-                added_in_round = True
-                
-                # Check if we've reached the limit
+            if company in company_jobs and company_jobs[company]:
+                mixed_jobs.append(company_jobs[company].pop(0))
+                added = True
                 if len(mixed_jobs) >= max_jobs:
                     break
-        
-        # If no jobs were added in this round, we're done
-        if not added_in_round:
+        if not added:
             break
-        
         iteration += 1
-    
+
+    # Fetch full JDs in parallel
+    if mixed_jobs:
+        jd_map = fetch_jds_parallel(mixed_jobs)
+        for job in mixed_jobs:
+            job["description"] = jd_map.get(job["job_id"], "")
+
     return mixed_jobs
 
 def main():
     try:
-        # Get keywords from command line argument
         if len(sys.argv) < 2:
             print(json.dumps([]))
             return
-        
+
         keywords = json.loads(sys.argv[1])
-        
-        # Fetch enough jobs to score and filter down to top 100
-        jobs = search_jobs_by_keywords(keywords, max_jobs=200)
-        
-        # Output as JSON
+        jobs = search_jobs_by_keywords(keywords, max_jobs=150)
         print(json.dumps(jobs))
-        
-    except Exception as e:
-        # Return empty array on error
+
+    except Exception:
         print(json.dumps([]))
         sys.exit(1)
 

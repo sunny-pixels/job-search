@@ -3,53 +3,29 @@ const config = require("../config/config");
 
 const groq = new Groq({ apiKey: config.GROQ_API_KEY });
 
-const techTerms = [
-  'javascript', 'typescript', 'python', 'java', 'react', 'node.js', 'express',
-  'mongodb', 'postgresql', 'mysql', 'git', 'docker', 'aws', 'azure', 'gcp',
-  'html', 'css', 'sass', 'tailwind', 'bootstrap', 'vue', 'angular', 'next.js',
-  'mern', 'mean', 'api', 'rest', 'graphql', 'sql', 'nosql', 'redis', 'webpack',
-  'vite', 'babel', 'eslint', 'jest', 'cypress', 'nginx', 'linux', 'kubernetes'
-];
-
-const filterJobKeywords = (keywords) => {
-  if (!Array.isArray(keywords)) return [];
-  return keywords.filter(kw => {
-    const lower = kw.toLowerCase();
-    const isTech = techTerms.some(t => lower.includes(t));
-    const isTitle = lower.includes('developer') || lower.includes('engineer') ||
-      lower.includes('analyst') || lower.includes('manager') ||
-      lower.includes('architect') || lower.includes('lead') ||
-      lower.includes('senior') || lower.includes('junior') ||
-      lower.includes('intern') || lower.includes('specialist') ||
-      lower.includes('designer') || lower.includes('scientist');
-    return !isTech && isTitle;
-  });
-};
-
 const analyzeResumeWithGroq = async (resumeText) => {
-  const prompt = `You are a professional resume parser. Extract structured data from the resume below and return ONLY a valid JSON object. No explanation, no markdown, no extra text.
+  const prompt = `You are a strict resume parser. Extract ONLY what is explicitly written in the resume. Do NOT infer or assume. Return ONLY a valid JSON object, no markdown, no explanation.
 
-Return this exact structure:
 {
-  "primary_roles": ["most relevant job titles this person qualifies for"],
-  "skills": ["technical and soft skills"],
-  "job_keywords": ["job titles to search for, e.g. Full-Stack Developer, Software Engineer"],
+  "primary_roles": ["exact job titles this person is targeting or has held"],
+  "skills": ["skills explicitly listed in the resume"],
+  "job_keywords": ["5-8 job titles to search on job boards that match this person's actual domain. Examples: if HR resume → HR Manager, Recruiter, Talent Acquisition Specialist; if sales → Sales Executive, Account Manager, Business Development; if logistics → Supply Chain Analyst, Logistics Coordinator; if security → SOC Analyst, Security Engineer; if software → Software Engineer, Full-Stack Developer. ONLY job titles, never technology or tool names."],
   "experience_level": "Intern or Junior or Mid or Senior",
   "experience_years": <number>,
-  "programming_languages": ["only language names"],
-  "frameworks": ["only framework names"],
-  "tools": ["only tool names"],
-  "summary": "2-3 sentence professional summary",
+  "programming_languages": ["only if explicitly listed in resume, else empty array"],
+  "frameworks": ["only if explicitly listed in resume, else empty array"],
+  "tools": ["tools explicitly mentioned in resume"],
+  "summary": "2-3 sentence summary based only on resume content",
   "education": ["Degree, Institution as a single string per entry"],
-  "projects": ["project names or types"],
-  "internships": ["company or role name"]
+  "projects": ["project names or types mentioned"],
+  "internships": ["internship company or role if explicitly mentioned"]
 }
 
-Rules:
-- job_keywords must be job titles ONLY (no tech names)
-- education entries must be plain strings
-- experience_years must be a number (0 if student/fresher)
-- Be specific and accurate based on actual resume content
+RULES:
+- job_keywords: reflect the ACTUAL domain. Never cross domains. A logistics resume must never have software titles.
+- experience_years: ONLY paid full-time/part-time work. Internships = 0.5 per 6 months. Education and personal projects = 0. No work experience = 0.
+- experience_level: Intern = 0 yrs, Junior = 0-2 yrs, Mid = 3-5 yrs, Senior = 5+ yrs
+- primary_roles: what this person actually is, not what they aspire to be unless stated
 
 Resume:
 ${resumeText.substring(0, 4000)}`;
@@ -80,47 +56,41 @@ ${resumeText.substring(0, 4000)}`;
 
   if (!parsed) throw new Error("Could not parse JSON from Groq response");
 
-  const validated = {
+  const expYears = parseInt(parsed.experience_years);
+  const safeExpYears = isNaN(expYears) || expYears < 0 ? 0 : expYears;
+
+  // Always derive level from years — don't trust AI's level if years says otherwise
+  let expLevel;
+  if (safeExpYears === 0) expLevel = "Intern";
+  else if (safeExpYears <= 2) expLevel = "Junior";
+  else if (safeExpYears <= 5) expLevel = "Mid";
+  else expLevel = "Senior";
+
+  // Validate job_keywords — only keep strings, no empty entries
+  const rawKeywords = Array.isArray(parsed.job_keywords)
+    ? parsed.job_keywords.filter(k => typeof k === 'string' && k.trim().length > 2)
+    : [];
+
+  // Fallback: if Groq returned too few, use primary_roles directly
+  const jobKeywords = rawKeywords.length >= 2
+    ? rawKeywords
+    : [...rawKeywords, ...(Array.isArray(parsed.primary_roles) ? parsed.primary_roles : [])].slice(0, 8);
+
+  return {
     primary_roles: Array.isArray(parsed.primary_roles) && parsed.primary_roles.length > 0
-      ? parsed.primary_roles : ["Software Developer"],
-    skills: Array.isArray(parsed.skills) ? parsed.skills : [],
-    job_keywords: filterJobKeywords(parsed.job_keywords),
-    experience_level: ["Intern", "Junior", "Mid", "Senior"].includes(parsed.experience_level)
-      ? parsed.experience_level : "Junior",
-    experience_years: parseInt(parsed.experience_years) || 0,
-    programming_languages: Array.isArray(parsed.programming_languages) ? parsed.programming_languages : [],
-    frameworks: Array.isArray(parsed.frameworks) ? parsed.frameworks : [],
-    tools: Array.isArray(parsed.tools) ? parsed.tools : [],
+      ? parsed.primary_roles : ["Professional"],
+    skills: Array.isArray(parsed.skills) ? parsed.skills.filter(s => typeof s === 'string') : [],
+    job_keywords: jobKeywords,
+    experience_level: expLevel,
+    experience_years: safeExpYears,
+    programming_languages: Array.isArray(parsed.programming_languages) ? parsed.programming_languages.filter(l => typeof l === 'string') : [],
+    frameworks: Array.isArray(parsed.frameworks) ? parsed.frameworks.filter(f => typeof f === 'string') : [],
+    tools: Array.isArray(parsed.tools) ? parsed.tools.filter(t => typeof t === 'string') : [],
     summary: typeof parsed.summary === 'string' ? parsed.summary : "",
     education: Array.isArray(parsed.education) ? parsed.education.map(e => String(e)) : [],
-    projects: Array.isArray(parsed.projects) ? parsed.projects : [],
-    internships: Array.isArray(parsed.internships) ? parsed.internships : []
+    projects: Array.isArray(parsed.projects) ? parsed.projects.filter(p => typeof p === 'string') : [],
+    internships: Array.isArray(parsed.internships) ? parsed.internships.filter(i => typeof i === 'string') : []
   };
-
-  // Fallback job keywords if too few
-  if (validated.job_keywords.length < 3) {
-    const titles = new Set(validated.job_keywords);
-    validated.primary_roles.forEach(role => {
-      const r = role.toLowerCase();
-      if (r.includes('full')) {
-        titles.add("Full-Stack Developer"); titles.add("Software Engineer"); titles.add("Web Developer");
-      } else if (r.includes('backend') || r.includes('back-end')) {
-        titles.add("Backend Developer"); titles.add("Software Engineer");
-      } else if (r.includes('frontend') || r.includes('front-end')) {
-        titles.add("Frontend Developer"); titles.add("Web Developer");
-      } else if (r.includes('data')) {
-        titles.add("Data Engineer"); titles.add("Data Analyst");
-      } else if (r.includes('mobile')) {
-        titles.add("Mobile Developer"); titles.add("iOS Developer"); titles.add("Android Developer");
-      } else {
-        titles.add(role);
-      }
-    });
-    titles.add("Software Developer");
-    validated.job_keywords = Array.from(titles).slice(0, 8);
-  }
-
-  return validated;
 };
 
 module.exports = { analyzeResumeWithGroq };
