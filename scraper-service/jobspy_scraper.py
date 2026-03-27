@@ -30,7 +30,7 @@ def scrape_for_role_country(role, country, results_per_role=20):
     jobs_list = []
     try:
         jobs = scrape_jobs(
-            site_name=["indeed", "linkedin"],
+            site_name=["indeed"],
             search_term=role,
             location=country,
             results_wanted=results_per_role,
