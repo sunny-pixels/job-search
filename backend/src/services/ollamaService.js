@@ -245,7 +245,7 @@ const scoreAndSortJobsWithEmbeddings = async (jobs, resumeAnalysis) => {
     if (aIsJobSpy !== bIsJobSpy) return aIsJobSpy - bIsJobSpy;
     return b.match_score - a.match_score;
   });
-  const result = scoredJobs.filter(j => j.match_score >= 35).slice(0, 100);
+  const result = scoredJobs.filter(j => j.match_score >= 35).slice(0, 200);
 
   console.log(`🎯 Final: ${result.length} jobs. Top score: ${result[0]?.match_score}%`);
   return result;

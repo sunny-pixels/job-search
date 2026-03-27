@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 
 const GOOGLE_FONTS = `
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap');
@@ -371,16 +371,19 @@ const styles = `
   .jobs-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 16px;
+    gap: 24px;
+    align-items: stretch;
   }
   .job-card {
     background: #fff;
     border: 1px solid #e8e8e3;
     border-radius: 18px;
-    padding: 24px;
+    padding: 28px;
     transition: all 0.25s;
     position: relative;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
   .job-card::before {
     content: '';
@@ -401,15 +404,15 @@ const styles = `
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    margin-bottom: 16px;
+    margin-bottom: 20px;
   }
   .company-row {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
   }
   .company-logo {
-    width: 40px; height: 40px;
+    width: 44px; height: 44px;
     border-radius: 10px;
     object-fit: cover;
     border: 1px solid #f0f0eb;
@@ -418,6 +421,10 @@ const styles = `
     font-weight: 600;
     font-size: 0.88rem;
     color: #222;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 120px;
   }
   .company-source {
     font-size: 0.72rem;
@@ -427,7 +434,7 @@ const styles = `
     font-family: 'Syne', sans-serif;
     font-size: 0.78rem;
     font-weight: 700;
-    padding: 4px 10px;
+    padding: 6px 12px;
     border-radius: 100px;
     white-space: nowrap;
   }
@@ -439,7 +446,7 @@ const styles = `
 
   .job-title {
     font-family: 'Syne', sans-serif;
-    font-size: 1rem;
+    font-size: 0.95rem;
     font-weight: 700;
     color: #111;
     line-height: 1.35;
@@ -448,7 +455,8 @@ const styles = `
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
-    min-height: 2.7rem;
+    min-height: 2.6rem;
+    max-height: 2.6rem;
   }
   .job-meta {
     display: flex;
@@ -459,16 +467,19 @@ const styles = `
   .job-meta-row {
     display: flex;
     align-items: center;
-    gap: 7px;
-    font-size: 0.82rem;
+    gap: 8px;
+    font-size: 0.8rem;
     color: #666;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .meta-icon { font-size: 0.85rem; }
   .btn-apply {
     display: block;
     width: 100%;
     text-align: center;
-    padding: 11px;
+    padding: 13px;
     background: #111;
     color: #fff;
     border-radius: 10px;
@@ -477,6 +488,7 @@ const styles = `
     text-decoration: none;
     transition: all 0.2s;
     letter-spacing: 0.01em;
+    margin-top: auto;
   }
   .btn-apply:hover {
     background: #333;
@@ -574,7 +586,92 @@ export default function ResumeUploader() {
   const [loading, setLoading] = useState(false);
   const [loadingJobs, setLoadingJobs] = useState(false);
 
+  // Stable ref-based page cache — survives re-renders, no stale closure issues
+  const pageCache = useRef({});
+  const prefetchingPages = useRef(new Set());
+
   const handleFileChange = (e) => setFile(e.target.files[0]);
+
+  // Silently prefetch a page into cache without affecting UI
+  const prefetchPage = useCallback(async (page) => {
+    if (pageCache.current[page] || prefetchingPages.current.has(page)) return;
+    prefetchingPages.current.add(page);
+    try {
+      const res = await fetch(`http://localhost:3001/api/resume/jobs?page=${page}&limit=12`);
+      if (!res.ok) return;
+      const data = await res.json();
+      pageCache.current[page] = {
+        jobs: data.jobs || [],
+        pagination: data.pagination,
+        scoreDistribution: data.score_distribution
+      };
+    } catch {
+      // silent fail
+    } finally {
+      prefetchingPages.current.delete(page);
+    }
+  }, []);
+
+  // Display a page — from cache if available, else fetch and show
+  const showPage = useCallback(async (page, showLoader = true) => {
+    setCurrentPage(page);
+
+    // Instant from cache
+    if (pageCache.current[page]) {
+      const cached = pageCache.current[page];
+      setJobs(cached.jobs);
+      setPagination(cached.pagination);
+      setScoreDistribution(cached.scoreDistribution);
+      // Prefetch adjacent pages
+      setTimeout(() => prefetchPage(page + 1), 200);
+      setTimeout(() => prefetchPage(page - 1), 400);
+      return;
+    }
+
+    // Not cached — fetch and display
+    if (showLoader) setLoadingJobs(true);
+    try {
+      const res = await fetch(`http://localhost:3001/api/resume/jobs?page=${page}&limit=12`);
+      if (!res.ok) throw new Error(`Status: ${res.status}`);
+      const data = await res.json();
+
+      const entry = {
+        jobs: data.jobs || [],
+        pagination: data.pagination,
+        scoreDistribution: data.score_distribution
+      };
+      pageCache.current[page] = entry;
+
+      setJobs(entry.jobs);
+      setPagination(entry.pagination);
+      setScoreDistribution(entry.scoreDistribution);
+
+      if (entry.jobs.length) {
+        setTimeout(() => document.getElementById("jobs-section")?.scrollIntoView({ behavior: "smooth" }), 100);
+      }
+
+      // Prefetch next + prev in background
+      setTimeout(() => prefetchPage(page + 1), 300);
+      setTimeout(() => prefetchPage(page - 1), 600);
+
+    } catch (err) {
+      console.error(err);
+    } finally {
+      if (showLoader) setLoadingJobs(false);
+    }
+  }, [prefetchPage]);
+
+  const fetchMatchingJobs = useCallback(async (page = 1) => {
+    // Clear cache on fresh fetch
+    pageCache.current = {};
+    prefetchingPages.current.clear();
+    await showPage(page, true);
+  }, [showPage]);
+
+  const handlePageChange = useCallback(async (page) => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    await showPage(page, true);
+  }, [showPage]);
 
   const handleUpload = async () => {
     if (!file) { setMessage({ text: "Please select a file first.", type: "error" }); return; }
@@ -582,6 +679,8 @@ export default function ResumeUploader() {
     setMessage({ text: "", type: "" });
     setAnalysis(null);
     setJobs([]);
+    pageCache.current = {};
+    prefetchingPages.current.clear();
     const formData = new FormData();
     formData.append("resume", file);
     try {
@@ -596,21 +695,6 @@ export default function ResumeUploader() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const fetchMatchingJobs = async (page = 1) => {
-    setLoadingJobs(true);
-    setCurrentPage(page);
-    try {
-      const res = await fetch(`http://localhost:3001/api/resume/jobs?page=${page}&limit=12`);
-      if (!res.ok) throw new Error(`Status: ${res.status}`);
-      const data = await res.json();
-      setJobs(data.jobs || []);
-      setPagination(data.pagination);
-      setScoreDistribution(data.score_distribution);
-      if (data.jobs?.length) setTimeout(() => document.getElementById("jobs-section")?.scrollIntoView({ behavior: "smooth" }), 100);
-    } catch (err) { console.error(err); }
-    finally { setLoadingJobs(false); }
   };
 
   const getScoreClass = (s) => {
@@ -639,7 +723,7 @@ export default function ResumeUploader() {
       if (!show && i === 3) { pages.push(<span key="el" style={{ padding: "0 4px", color: "#bbb", display: "flex", alignItems: "center" }}>…</span>); continue; }
       if (!show) continue;
       pages.push(
-        <button key={i} className={`page-btn ${currentPage === i ? "active" : ""}`} onClick={() => fetchMatchingJobs(i)}>{i}</button>
+        <button key={i} className={`page-btn ${currentPage === i ? "active" : ""}`} onClick={() => handlePageChange(i)}>{i}</button>
       );
     }
     return pages;
@@ -790,11 +874,10 @@ export default function ResumeUploader() {
                       <div className="job-title">{job.title}</div>
 
                       <div className="job-meta">
-                        <div className="job-meta-row"><span className="meta-icon">📍</span><span>{job.location}</span></div>
-                        {job.department && job.department !== "N/A" && (
-                          <div className="job-meta-row"><span className="meta-icon">🏢</span><span>{job.department}</span></div>
-                        )}
+                        <div className="job-meta-row"><span className="meta-icon">📍</span><span>{job.location || "Location N/A"}</span></div>
                       </div>
+
+                      <div style={{ flexGrow: 1 }} />
 
                       <a href={job.job_url} target="_blank" rel="noopener noreferrer" className="btn-apply">
                         Apply Now →
@@ -805,9 +888,9 @@ export default function ResumeUploader() {
 
                 {pagination && pagination.total_pages > 1 && (
                   <div className="pagination">
-                    <button className="page-btn wide" disabled={!pagination.has_prev} onClick={() => fetchMatchingJobs(currentPage - 1)}>← Prev</button>
+                    <button className="page-btn wide" disabled={!pagination.has_prev} onClick={() => handlePageChange(currentPage - 1)}>← Prev</button>
                     {renderPageNumbers()}
-                    <button className="page-btn wide" disabled={!pagination.has_next} onClick={() => fetchMatchingJobs(currentPage + 1)}>Next →</button>
+                    <button className="page-btn wide" disabled={!pagination.has_next} onClick={() => handlePageChange(currentPage + 1)}>Next →</button>
                   </div>
                 )}
               </>
