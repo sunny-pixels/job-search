@@ -1,7 +1,7 @@
 const { extractTextFromPDF } = require("../services/pdfService");
 const { analyzeResumeWithGroq } = require("../services/groqService");
 const { fetchAllJobs } = require("../services/jobMatchingService");
-const { scoreAndSortJobsWithEmbeddings } = require("../services/ollamaService");
+const { scoreAndSortJobs } = require("../services/jobScoringService");
 
 // In-memory store
 let lastAnalyzedResume = null;
@@ -70,7 +70,7 @@ const getMatchingJobs = async (req, res) => {
     const allJobs = await fetchAllJobs(job_keywords, primary_roles);
     console.log(`📊 Found ${allJobs.length} total jobs, scoring...`);
 
-    const scoredJobs = await scoreAndSortJobsWithEmbeddings(allJobs, lastAnalyzedResume.analysis);
+    const scoredJobs = scoreAndSortJobs(allJobs, lastAnalyzedResume.analysis);
 
     // Store in cache for all subsequent page requests
     cachedScoredJobs = scoredJobs;

@@ -1,22 +1,58 @@
 /**
- * Production-Ready Job Scoring Service
- * Fast rule-based scoring optimized for scale
- * No AI calls - instant results
+ * Extract minimum experience required from job title and description
  */
+const extractRequiredExperience = (job) => {
+  const text = `${job.title || ""} ${job.description || ""}`.toLowerCase();
+  
+  // Patterns to match experience requirements
+  const patterns = [
+    /(\d+)\s*\+\s*(?:yoe|years?(?:\s+of)?\s+(?:experience|exp))/i,
+    /(\d+)\s*[-–]\s*\d+\s*(?:yoe|years?(?:\s+of)?\s+(?:experience|exp))/i,
+    /(?:minimum|at\s+least|requires?)\s+(\d+)\s*\+?\s*years?/i,
+    /(\d+)\s*\+?\s*years?\s+(?:of\s+)?(?:professional\s+)?experience/i,
+  ];
+  
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) return parseInt(match[1]);
+  }
+  
+  // Check job title for level indicators
+  if (job.title.toLowerCase().includes('staff') || job.title.toLowerCase().includes('principal')) return 7;
+  if (job.title.toLowerCase().includes('senior') || job.title.toLowerCase().includes('lead')) return 4;
+  if (job.title.toLowerCase().includes('mid') || job.title.toLowerCase().includes('ii')) return 2;
+  if (job.title.toLowerCase().includes('junior') || job.title.toLowerCase().includes('associate') || job.title.toLowerCase().includes('entry')) return 0;
+  if (job.title.toLowerCase().includes('intern')) return 0;
+  
+  return null; // No requirement found
+};
+
+/**
+ * Hard filter: Check if candidate meets minimum experience requirement
+ */
+const meetsExperienceRequirement = (job, candidateYears) => {
+  const requiredYears = extractRequiredExperience(job);
+  
+  // If no requirement found, candidate qualifies
+  if (requiredYears === null) return true;
+  
+  // Candidate must meet or exceed requirement
+  return candidateYears >= requiredYears;
+};
 
 const calculateJobMatchScore = (job, resumeAnalysis) => {
   let score = 0;
-  const jobTitle = job.title.toLowerCase();
-  const jobDepartment = job.department.toLowerCase();
-  const jobLocation = job.location.toLowerCase();
+  const jobTitle = (job.title || "").toLowerCase();
+  const jobDepartment = (job.department || "").toLowerCase();
+  const jobLocation = (job.location || "").toLowerCase();
   
-  // Normalize and prepare resume data
-  const primaryRoles = (resumeAnalysis.primary_roles || []).map(r => String(r).toLowerCase());
-  const jobKeywords = (resumeAnalysis.job_keywords || []).map(k => String(k).toLowerCase());
-  const skills = (resumeAnalysis.skills || []).map(s => String(s).toLowerCase());
-  const languages = (resumeAnalysis.programming_languages || []).map(l => String(l).toLowerCase());
-  const frameworks = (resumeAnalysis.frameworks || []).map(f => String(f).toLowerCase());
-  const tools = (resumeAnalysis.tools || []).map(t => String(t).toLowerCase());
+  // Normalize and prepare resume data with safety checks
+  const primaryRoles = (resumeAnalysis.primary_roles || []).map(r => String(r || "").toLowerCase()).filter(Boolean);
+  const jobKeywords = (resumeAnalysis.job_keywords || []).map(k => String(k || "").toLowerCase()).filter(Boolean);
+  const skills = (resumeAnalysis.skills || []).map(s => String(s || "").toLowerCase()).filter(Boolean);
+  const languages = (resumeAnalysis.programming_languages || []).map(l => String(l || "").toLowerCase()).filter(Boolean);
+  const frameworks = (resumeAnalysis.frameworks || []).map(f => String(f || "").toLowerCase()).filter(Boolean);
+  const tools = (resumeAnalysis.tools || []).map(t => String(t || "").toLowerCase()).filter(Boolean);
   
   // 1. EXACT ROLE MATCH (40 points) - Highest priority
   let roleScore = 0;
@@ -73,8 +109,8 @@ const calculateJobMatchScore = (job, resumeAnalysis) => {
   }
   
   // 3. EXPERIENCE LEVEL MATCH (20 points)
-  const experienceLevel = resumeAnalysis.experience_level.toLowerCase();
-  const experienceYears = resumeAnalysis.experience_years;
+  const experienceLevel = (resumeAnalysis.experience_level || "mid-level").toLowerCase();
+  const experienceYears = resumeAnalysis.experience_years || 0;
   
   let expScore = 0;
   
@@ -137,10 +173,24 @@ const calculateJobMatchScore = (job, resumeAnalysis) => {
 };
 
 const scoreAndSortJobs = (jobs, resumeAnalysis) => {
-  console.log(`⚡ Fast scoring ${jobs.length} jobs...`);
+  console.log(`⚡ Filtering and scoring ${jobs.length} jobs...`);
   
-  // Score all jobs with fast rule-based algorithm
-  const scoredJobs = jobs.map(job => ({
+  const experienceYears = resumeAnalysis.experience_years || 0;
+  
+  // HARD FILTER: Remove jobs candidate doesn't qualify for
+  const qualifyingJobs = jobs.filter(job => {
+    const qualifies = meetsExperienceRequirement(job, experienceYears);
+    if (!qualifies) {
+      const required = extractRequiredExperience(job);
+      console.log(`  ⏭️  Skipped: "${job.title}" (requires ${required}y, you have ${experienceYears}y)`);
+    }
+    return qualifies;
+  });
+  
+  console.log(`✅ Qualified: ${qualifyingJobs.length}/${jobs.length} jobs`);
+  
+  // Score all qualifying jobs with fast rule-based algorithm
+  const scoredJobs = qualifyingJobs.map(job => ({
     ...job,
     match_score: calculateJobMatchScore(job, resumeAnalysis)
   }));

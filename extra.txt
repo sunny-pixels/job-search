@@ -46,3 +46,5 @@ is there any requirement of database for the whole process or the cacheing ??
 
 
 don't implement right now just tell me the flow and how can we achieve this?
+
+remove ollama and use groq embeddings!
