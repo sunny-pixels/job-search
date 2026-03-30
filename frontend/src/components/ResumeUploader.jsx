@@ -489,10 +489,41 @@ const styles = `
     transition: all 0.2s;
     letter-spacing: 0.01em;
     margin-top: auto;
+    border: none;
+    cursor: pointer;
   }
   .btn-apply:hover {
     background: #333;
     box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+  }
+  .btn-mark-applied {
+    background: #fff;
+    color: #111;
+    border: 1.5px solid #e0e0d8;
+    padding: 12px;
+  }
+  .btn-mark-applied:hover {
+    background: #f5f5f5;
+    border-color: #111;
+    box-shadow: none;
+  }
+  .btn-applied {
+    background: #22c55e;
+    cursor: default;
+    pointer-events: none;
+  }
+  .btn-applied:hover {
+    background: #22c55e;
+    box-shadow: none;
+  }
+  .job-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: auto;
+  }
+  .job-actions .btn-apply {
+    margin-top: 0;
   }
 
   /* ── LOADING ── */
@@ -585,12 +616,63 @@ export default function ResumeUploader() {
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [loadingJobs, setLoadingJobs] = useState(false);
+  const [appliedJobs, setAppliedJobs] = useState(new Set());
+  const [resumeId, setResumeId] = useState(null);
 
   // Stable ref-based page cache — survives re-renders, no stale closure issues
   const pageCache = useRef({});
   const prefetchingPages = useRef(new Set());
 
   const handleFileChange = (e) => setFile(e.target.files[0]);
+
+  // Check which jobs on current page are already applied
+  const checkAppliedStatus = useCallback(async () => {
+    if (!resumeId || jobs.length === 0) return;
+    
+    const jobIds = jobs.map(job => `${job.company}_${job.title}_${job.location}`);
+    
+    try {
+      const res = await fetch("http://localhost:3001/api/applied-jobs/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resumeId, jobIds })
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setAppliedJobs(new Set(data.appliedJobIds));
+      }
+    } catch (err) {
+      console.error("Failed to check applied status:", err);
+    }
+  }, [resumeId, jobs]);
+
+  // Mark a job as applied
+  const markAsApplied = async (job) => {
+    if (!resumeId) return;
+    
+    const jobId = `${job.company}_${job.title}_${job.location}`;
+    
+    try {
+      const res = await fetch("http://localhost:3001/api/applied-jobs/mark-applied", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resumeId,
+          jobId,
+          jobTitle: job.title,
+          company: job.company,
+          jobUrl: job.job_url
+        })
+      });
+      
+      if (res.ok) {
+        setAppliedJobs(prev => new Set([...prev, jobId]));
+      }
+    } catch (err) {
+      console.error("Failed to mark as applied:", err);
+    }
+  };
 
   // Silently prefetch a page into cache without affecting UI
   const prefetchPage = useCallback(async (page) => {
@@ -666,12 +748,20 @@ export default function ResumeUploader() {
     pageCache.current = {};
     prefetchingPages.current.clear();
     await showPage(page, true);
-  }, [showPage]);
+    
+    // Check which jobs are already applied
+    if (resumeId) {
+      checkAppliedStatus();
+    }
+  }, [showPage, resumeId]);
 
   const handlePageChange = useCallback(async (page) => {
     window.scrollTo({ top: 0, behavior: "smooth" });
     await showPage(page, true);
-  }, [showPage]);
+    if (resumeId) {
+      checkAppliedStatus();
+    }
+  }, [showPage, resumeId]);
 
   const handleUpload = async () => {
     if (!file) { setMessage({ text: "Please select a file first.", type: "error" }); return; }
@@ -689,6 +779,7 @@ export default function ResumeUploader() {
       const data = await res.json();
       setMessage({ text: "Resume analysed successfully!", type: "success" });
       setAnalysis(data.analysis);
+      setResumeId(data._id);
       fetchMatchingJobs();
     } catch (err) {
       setMessage({ text: `Upload failed: ${err.message}`, type: "error" });
@@ -734,19 +825,12 @@ export default function ResumeUploader() {
       <style>{styles}</style>
       <div className="page-root">
 
-        {/* NAV */}
-        <nav className="nav">
-          <div className="nav-brand">
-            <div className="nav-logo-dot">
-              <svg width="14" height="14" viewBox="0 0 14 14"><path d="M7 1L13 4V10L7 13L1 10V4L7 1Z"/></svg>
-            </div>
-            JobSphere
-          </div>
-          <div className="nav-pill">AI-Powered</div>
-        </nav>
-
         {/* HERO */}
         <div className="hero">
+          <div className="hero-tag">
+            <span className="hero-tag-dot" />
+            Powered by AI Resume Analysis
+          </div>
           <div className="hero-tag">
             <span className="hero-tag-dot" />
             Powered by AI Resume Analysis
@@ -856,34 +940,58 @@ export default function ResumeUploader() {
                 )}
 
                 <div className="jobs-grid">
-                  {jobs.map((job, idx) => (
-                    <div key={idx} className="job-card">
-                      <div className="job-card-top">
-                        <div className="company-row">
-                          <img src={getCompanyLogo(job.company)} alt={job.company} className="company-logo" />
-                          <div>
-                            <div className="company-name">{job.company}</div>
-                            <div className="company-source">{job.source}</div>
+                  {jobs.map((job, idx) => {
+                    const jobId = `${job.company}_${job.title}_${job.location}`;
+                    const isApplied = appliedJobs.has(jobId);
+                    
+                    return (
+                      <div key={idx} className="job-card">
+                        <div className="job-card-top">
+                          <div className="company-row">
+                            <img src={getCompanyLogo(job.company)} alt={job.company} className="company-logo" />
+                            <div>
+                              <div className="company-name">{job.company}</div>
+                              <div className="company-source">{job.source}</div>
+                            </div>
                           </div>
+                          <span className={`score-badge ${getScoreClass(job.match_score)}`}>
+                            {job.match_score}% · {getScoreLabel(job.match_score)}
+                          </span>
                         </div>
-                        <span className={`score-badge ${getScoreClass(job.match_score)}`}>
-                          {job.match_score}% · {getScoreLabel(job.match_score)}
-                        </span>
+
+                        <div className="job-title">{job.title}</div>
+
+                        <div className="job-meta">
+                          <div className="job-meta-row"><span className="meta-icon">📍</span><span>{job.location || "Location N/A"}</span></div>
+                        </div>
+
+                        <div style={{ flexGrow: 1 }} />
+
+                        <div className="job-actions">
+                          <a 
+                            href={job.job_url} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="btn-apply"
+                          >
+                            Apply Now →
+                          </a>
+                          {isApplied ? (
+                            <button className="btn-apply btn-applied">
+                              ✓ Applied
+                            </button>
+                          ) : (
+                            <button 
+                              className="btn-apply btn-mark-applied"
+                              onClick={() => markAsApplied(job)}
+                            >
+                              Mark as Applied
+                            </button>
+                          )}
+                        </div>
                       </div>
-
-                      <div className="job-title">{job.title}</div>
-
-                      <div className="job-meta">
-                        <div className="job-meta-row"><span className="meta-icon">📍</span><span>{job.location || "Location N/A"}</span></div>
-                      </div>
-
-                      <div style={{ flexGrow: 1 }} />
-
-                      <a href={job.job_url} target="_blank" rel="noopener noreferrer" className="btn-apply">
-                        Apply Now →
-                      </a>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 {pagination && pagination.total_pages > 1 && (

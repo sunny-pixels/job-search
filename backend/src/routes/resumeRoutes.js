@@ -1,15 +1,17 @@
 const express = require("express");
 const multer = require("multer");
-const { uploadResume, getResumeData, getMatchingJobs } = require("../controllers/resumeController");
+const { uploadResume, getResumeData, getAllResumes, getResumeById, getMatchingJobs } = require("../controllers/resumeController");
 
 const router = express.Router();
 
 // Configure multer for memory storage
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Routes
+// Routes (order matters - specific routes before dynamic ones)
 router.post("/upload", upload.single("resume"), uploadResume);
-router.get("/", getResumeData);
+router.get("/all", getAllResumes);
 router.get("/jobs", getMatchingJobs);
+router.get("/:id", getResumeById);
+router.get("/", getResumeData);
 
 module.exports = router;

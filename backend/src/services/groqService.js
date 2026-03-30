@@ -44,13 +44,20 @@ ${resumeText.substring(0, 4000)}`;
 
   let parsed = null;
   try {
-    parsed = JSON.parse(raw);
+    // Remove any comments from JSON before parsing
+    const cleanedJson = raw.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+    parsed = JSON.parse(cleanedJson);
   } catch {
     const block = raw.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-    if (block) parsed = JSON.parse(block[1]);
-    else {
+    if (block) {
+      const cleanedJson = block[1].replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+      parsed = JSON.parse(cleanedJson);
+    } else {
       const match = raw.match(/\{[\s\S]*\}/);
-      if (match) parsed = JSON.parse(match[0]);
+      if (match) {
+        const cleanedJson = match[0].replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+        parsed = JSON.parse(cleanedJson);
+      }
     }
   }
 
