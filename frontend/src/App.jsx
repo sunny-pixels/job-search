@@ -8,14 +8,20 @@ export const AppliedJobsContext = createContext();
 function App() {
   const [activeTab, setActiveTab] = useState("uploader");
   const [appliedJobsRefreshTrigger, setAppliedJobsRefreshTrigger] = useState(0);
+  const [resumeUploadTrigger, setResumeUploadTrigger] = useState(0);
 
   // Function to trigger refresh in Resume Library when a job is marked as applied
   const triggerAppliedJobsRefresh = () => {
     setAppliedJobsRefreshTrigger(prev => prev + 1);
   };
 
+  // Function to trigger refresh in Resume Library when a new resume is uploaded
+  const triggerResumeUpload = () => {
+    setResumeUploadTrigger(prev => prev + 1);
+  };
+
   return (
-    <AppliedJobsContext.Provider value={{ appliedJobsRefreshTrigger, triggerAppliedJobsRefresh }}>
+    <AppliedJobsContext.Provider value={{ appliedJobsRefreshTrigger, triggerAppliedJobsRefresh, resumeUploadTrigger, triggerResumeUpload }}>
       <div>
       <nav style={{
         position: "sticky",

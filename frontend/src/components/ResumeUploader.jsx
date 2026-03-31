@@ -607,7 +607,7 @@ const styles = `
 `;
 
 export default function ResumeUploader() {
-  const { triggerAppliedJobsRefresh } = useContext(AppliedJobsContext);
+  const { triggerAppliedJobsRefresh, triggerResumeUpload } = useContext(AppliedJobsContext);
   const [file, setFile] = useState(null);
   const [message, setMessage] = useState({ text: "", type: "" });
   const [analysis, setAnalysis] = useState(null);
@@ -814,6 +814,8 @@ export default function ResumeUploader() {
       setAnalysis(data.analysis);
       setResumeId(data._id);
       fetchMatchingJobs();
+      // Trigger refresh in Resume Library
+      triggerResumeUpload();
     } catch (err) {
       setMessage({ text: `Upload failed: ${err.message}`, type: "error" });
     } finally {

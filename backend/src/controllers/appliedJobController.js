@@ -115,4 +115,41 @@ const checkIfApplied = async (req, res) => {
   }
 };
 
-module.exports = { markJobAsApplied, unmarkJobAsApplied, getAppliedJobs, checkIfApplied };
+const updateJobStatus = async (req, res) => {
+  try {
+    const { resumeId, jobId, status } = req.body;
+
+    if (!resumeId || !jobId || !status) {
+      return res.status(400).json({ message: "resumeId, jobId, and status are required" });
+    }
+
+    const validStatuses = ["applied", "shortlisted", "interview", "rejected"];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ 
+        message: "Invalid status. Must be one of: applied, shortlisted, interview, rejected" 
+      });
+    }
+
+    const appliedJob = await AppliedJob.findOne({ resumeId, jobId });
+
+    if (!appliedJob) {
+      return res.status(404).json({ message: "Applied job not found" });
+    }
+
+    appliedJob.status = status;
+    appliedJob.statusUpdatedAt = new Date();
+    await appliedJob.save();
+
+    res.json({
+      message: "Job status updated successfully",
+      status: appliedJob.status,
+      statusUpdatedAt: appliedJob.statusUpdatedAt
+    });
+
+  } catch (error) {
+    console.error("Update status error:", error.message);
+    res.status(500).json({ message: "Error updating job status", error: error.message });
+  }
+};
+
+module.exports = { markJobAsApplied, unmarkJobAsApplied, getAppliedJobs, checkIfApplied, updateJobStatus };

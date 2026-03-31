@@ -228,6 +228,82 @@ const styles = `
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
   }
 
+  .job-status-section {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #e8e8e3;
+  }
+
+  .job-status-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #999;
+    margin-bottom: 8px;
+  }
+
+  .job-status-buttons {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .status-btn {
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    border: 1.5px solid;
+    cursor: pointer;
+    transition: all 0.15s;
+    background: #fff;
+  }
+
+  .status-btn.applied {
+    border-color: #3b82f6;
+    color: #3b82f6;
+  }
+
+  .status-btn.applied.active {
+    background: #3b82f6;
+    color: #fff;
+  }
+
+  .status-btn.shortlisted {
+    border-color: #f59e0b;
+    color: #f59e0b;
+  }
+
+  .status-btn.shortlisted.active {
+    background: #f59e0b;
+    color: #fff;
+  }
+
+  .status-btn.interview {
+    border-color: #8b5cf6;
+    color: #8b5cf6;
+  }
+
+  .status-btn.interview.active {
+    background: #8b5cf6;
+    color: #fff;
+  }
+
+  .status-btn.rejected {
+    border-color: #ef4444;
+    color: #ef4444;
+  }
+
+  .status-btn.rejected.active {
+    background: #ef4444;
+    color: #fff;
+  }
+
+  .status-btn:hover:not(.active) {
+    opacity: 0.7;
+  }
+
   .empty-state {
     text-align: center;
     padding: 60px 20px;
@@ -255,7 +331,7 @@ const styles = `
 `;
 
 export default function ResumeLibrary() {
-  const { appliedJobsRefreshTrigger } = useContext(AppliedJobsContext);
+  const { appliedJobsRefreshTrigger, resumeUploadTrigger } = useContext(AppliedJobsContext);
   const [resumes, setResumes] = useState([]);
   const [appliedJobs, setAppliedJobs] = useState({});
   const [expandedResumes, setExpandedResumes] = useState(new Set());
@@ -265,11 +341,20 @@ export default function ResumeLibrary() {
     fetchAllResumes();
   }, []);
 
+  // Refresh resume list when a new resume is uploaded
+  useEffect(() => {
+    if (resumeUploadTrigger > 0) {
+      fetchAllResumes();
+    }
+  }, [resumeUploadTrigger]);
+
   // Refresh applied jobs when trigger changes (job marked as applied in Upload section)
   useEffect(() => {
     if (appliedJobsRefreshTrigger > 0) {
-      // Clear the applied jobs cache to force refetch
-      setAppliedJobs({});
+      // Refetch only for expanded resumes instead of clearing all
+      expandedResumes.forEach(resumeId => {
+        fetchAppliedJobs(resumeId, true);
+      });
     }
   }, [appliedJobsRefreshTrigger]);
 
@@ -287,8 +372,8 @@ export default function ResumeLibrary() {
     }
   };
 
-  const fetchAppliedJobs = async (resumeId) => {
-    if (appliedJobs[resumeId]) return;
+  const fetchAppliedJobs = async (resumeId, forceRefetch = false) => {
+    if (appliedJobs[resumeId] && !forceRefetch) return;
     
     try {
       const res = await fetch(`http://localhost:3001/api/applied-jobs/${resumeId}`);
@@ -319,6 +404,32 @@ export default function ResumeLibrary() {
       month: "short", 
       day: "numeric" 
     });
+  };
+
+  const updateJobStatus = async (resumeId, jobId, status) => {
+    try {
+      const res = await fetch("http://localhost:3001/api/applied-jobs/update-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resumeId, jobId, status })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        // Update the job status in the local state immediately
+        setAppliedJobs(prev => {
+          const updated = { ...prev };
+          if (updated[resumeId]) {
+            updated[resumeId] = updated[resumeId].map(job => 
+              job.jobId === jobId ? { ...job, status, statusUpdatedAt: data.job?.statusUpdatedAt || new Date().toISOString() } : job
+            );
+          }
+          return updated;
+        });
+      }
+    } catch (err) {
+      console.error("Failed to update job status:", err);
+    }
   };
 
   if (loading) {
@@ -432,10 +543,43 @@ export default function ResumeLibrary() {
                       ) : (
                         jobs.map((job, idx) => (
                           <div key={idx} className="applied-job-item">
-                            <div className="job-item-info">
-                              <div className="job-item-title">{job.jobTitle}</div>
-                              <div className="job-item-company">{job.company}</div>
+                            <div style={{ flex: 1 }}>
+                              <div className="job-item-info">
+                                <div className="job-item-title">{job.jobTitle}</div>
+                                <div className="job-item-company">{job.company}</div>
+                              </div>
+                              
+                              <div className="job-status-section">
+                                <div className="job-status-label">Application Status</div>
+                                <div className="job-status-buttons">
+                                  <button
+                                    className={`status-btn applied ${job.status === 'applied' ? 'active' : ''}`}
+                                    onClick={() => updateJobStatus(resume._id, job.jobId, 'applied')}
+                                  >
+                                    Applied
+                                  </button>
+                                  <button
+                                    className={`status-btn shortlisted ${job.status === 'shortlisted' ? 'active' : ''}`}
+                                    onClick={() => updateJobStatus(resume._id, job.jobId, 'shortlisted')}
+                                  >
+                                    Shortlisted
+                                  </button>
+                                  <button
+                                    className={`status-btn interview ${job.status === 'interview' ? 'active' : ''}`}
+                                    onClick={() => updateJobStatus(resume._id, job.jobId, 'interview')}
+                                  >
+                                    Interview
+                                  </button>
+                                  <button
+                                    className={`status-btn rejected ${job.status === 'rejected' ? 'active' : ''}`}
+                                    onClick={() => updateJobStatus(resume._id, job.jobId, 'rejected')}
+                                  >
+                                    Rejected
+                                  </button>
+                                </div>
+                              </div>
                             </div>
+                            
                             <div className="job-item-actions">
                               <div className="job-item-date">{formatDate(job.appliedAt)}</div>
                               <a 
