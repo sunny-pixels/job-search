@@ -41,6 +41,32 @@ const markJobAsApplied = async (req, res) => {
   }
 };
 
+const unmarkJobAsApplied = async (req, res) => {
+  try {
+    const { resumeId, jobId } = req.body;
+
+    if (!resumeId || !jobId) {
+      return res.status(400).json({ message: "resumeId and jobId are required" });
+    }
+
+    // Delete the application record
+    const result = await AppliedJob.deleteOne({ resumeId, jobId });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ message: "Application not found" });
+    }
+
+    res.json({
+      message: "Job unmarked as applied",
+      applied: false
+    });
+
+  } catch (error) {
+    console.error("Unmark applied error:", error.message);
+    res.status(500).json({ message: "Error unmarking job as applied", error: error.message });
+  }
+};
+
 const getAppliedJobs = async (req, res) => {
   try {
     const { resumeId } = req.params;
@@ -89,4 +115,4 @@ const checkIfApplied = async (req, res) => {
   }
 };
 
-module.exports = { markJobAsApplied, getAppliedJobs, checkIfApplied };
+module.exports = { markJobAsApplied, unmarkJobAsApplied, getAppliedJobs, checkIfApplied };

@@ -1,12 +1,22 @@
-import { useState } from "react";
+import { useState, createContext, useContext } from "react";
 import ResumeUploader from "./components/ResumeUploader.jsx";
 import ResumeLibrary from "./components/ResumeLibrary.jsx";
 
+// Create a context for sharing applied jobs state
+export const AppliedJobsContext = createContext();
+
 function App() {
   const [activeTab, setActiveTab] = useState("uploader");
+  const [appliedJobsRefreshTrigger, setAppliedJobsRefreshTrigger] = useState(0);
+
+  // Function to trigger refresh in Resume Library when a job is marked as applied
+  const triggerAppliedJobsRefresh = () => {
+    setAppliedJobsRefreshTrigger(prev => prev + 1);
+  };
 
   return (
-    <div>
+    <AppliedJobsContext.Provider value={{ appliedJobsRefreshTrigger, triggerAppliedJobsRefresh }}>
+      <div>
       <nav style={{
         position: "sticky",
         top: 0,
@@ -82,8 +92,14 @@ function App() {
         </div>
       </nav>
 
-      {activeTab === "uploader" ? <ResumeUploader /> : <ResumeLibrary />}
+      <div style={{ display: activeTab === "uploader" ? "block" : "none" }}>
+        <ResumeUploader />
+      </div>
+      <div style={{ display: activeTab === "library" ? "block" : "none" }}>
+        <ResumeLibrary />
+      </div>
     </div>
+    </AppliedJobsContext.Provider>
   );
 }
 

@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useContext } from "react";
+import { AppliedJobsContext } from "../App.jsx";
 
 const styles = `
   .library-root {
@@ -254,6 +255,7 @@ const styles = `
 `;
 
 export default function ResumeLibrary() {
+  const { appliedJobsRefreshTrigger } = useContext(AppliedJobsContext);
   const [resumes, setResumes] = useState([]);
   const [appliedJobs, setAppliedJobs] = useState({});
   const [expandedResumes, setExpandedResumes] = useState(new Set());
@@ -262,6 +264,14 @@ export default function ResumeLibrary() {
   useEffect(() => {
     fetchAllResumes();
   }, []);
+
+  // Refresh applied jobs when trigger changes (job marked as applied in Upload section)
+  useEffect(() => {
+    if (appliedJobsRefreshTrigger > 0) {
+      // Clear the applied jobs cache to force refetch
+      setAppliedJobs({});
+    }
+  }, [appliedJobsRefreshTrigger]);
 
   const fetchAllResumes = async () => {
     setLoading(true);

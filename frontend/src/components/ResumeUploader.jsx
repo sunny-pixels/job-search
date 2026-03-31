@@ -1,4 +1,5 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useContext } from "react";
+import { AppliedJobsContext } from "../App.jsx";
 
 const GOOGLE_FONTS = `
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap');
@@ -509,12 +510,11 @@ const styles = `
   }
   .btn-applied {
     background: #22c55e;
-    cursor: default;
-    pointer-events: none;
+    cursor: pointer;
   }
   .btn-applied:hover {
-    background: #22c55e;
-    box-shadow: none;
+    background: #16a34a;
+    box-shadow: 0 4px 16px rgba(34, 197, 94, 0.3);
   }
   .job-actions {
     display: flex;
@@ -607,6 +607,7 @@ const styles = `
 `;
 
 export default function ResumeUploader() {
+  const { triggerAppliedJobsRefresh } = useContext(AppliedJobsContext);
   const [file, setFile] = useState(null);
   const [message, setMessage] = useState({ text: "", type: "" });
   const [analysis, setAnalysis] = useState(null);
@@ -668,9 +669,41 @@ export default function ResumeUploader() {
       
       if (res.ok) {
         setAppliedJobs(prev => new Set([...prev, jobId]));
+        // Trigger refresh in Resume Library
+        triggerAppliedJobsRefresh();
       }
     } catch (err) {
       console.error("Failed to mark as applied:", err);
+    }
+  };
+
+  // Unmark a job as applied (undo)
+  const unmarkAsApplied = async (job) => {
+    if (!resumeId) return;
+    
+    const jobId = `${job.company}_${job.title}_${job.location}`;
+    
+    try {
+      const res = await fetch("http://localhost:3001/api/applied-jobs/unmark-applied", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resumeId,
+          jobId
+        })
+      });
+      
+      if (res.ok) {
+        setAppliedJobs(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(jobId);
+          return newSet;
+        });
+        // Trigger refresh in Resume Library
+        triggerAppliedJobsRefresh();
+      }
+    } catch (err) {
+      console.error("Failed to unmark as applied:", err);
     }
   };
 
@@ -977,7 +1010,11 @@ export default function ResumeUploader() {
                             Apply Now →
                           </a>
                           {isApplied ? (
-                            <button className="btn-apply btn-applied">
+                            <button 
+                              className="btn-apply btn-applied"
+                              onClick={() => unmarkAsApplied(job)}
+                              title="Click to undo"
+                            >
                               ✓ Applied
                             </button>
                           ) : (
