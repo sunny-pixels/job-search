@@ -331,7 +331,7 @@ const styles = `
 `;
 
 export default function ResumeLibrary() {
-  const { appliedJobsRefreshTrigger, resumeUploadTrigger } = useContext(AppliedJobsContext);
+  const { appliedJobsRefreshTrigger, resumeUploadTrigger, activeTab } = useContext(AppliedJobsContext);
   const [resumes, setResumes] = useState([]);
   const [appliedJobs, setAppliedJobs] = useState({});
   const [expandedResumes, setExpandedResumes] = useState(new Set());
@@ -347,6 +347,15 @@ export default function ResumeLibrary() {
       fetchAllResumes();
     }
   }, [resumeUploadTrigger]);
+
+  // Refetch applied jobs for expanded resumes when tab becomes active
+  useEffect(() => {
+    if (activeTab === "library" && expandedResumes.size > 0) {
+      expandedResumes.forEach(resumeId => {
+        fetchAppliedJobs(resumeId, true);
+      });
+    }
+  }, [activeTab]);
 
   // Refresh applied jobs when trigger changes (job marked as applied in Upload section)
   useEffect(() => {

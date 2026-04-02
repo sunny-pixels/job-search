@@ -1,6 +1,7 @@
 import { useState, createContext, useContext } from "react";
 import ResumeUploader from "./components/ResumeUploader.jsx";
 import ResumeLibrary from "./components/ResumeLibrary.jsx";
+import JobsTracker from "./components/JobsTracker.jsx";
 
 // Create a context for sharing applied jobs state
 export const AppliedJobsContext = createContext();
@@ -21,7 +22,7 @@ function App() {
   };
 
   return (
-    <AppliedJobsContext.Provider value={{ appliedJobsRefreshTrigger, triggerAppliedJobsRefresh, resumeUploadTrigger, triggerResumeUpload }}>
+    <AppliedJobsContext.Provider value={{ appliedJobsRefreshTrigger, triggerAppliedJobsRefresh, resumeUploadTrigger, triggerResumeUpload, activeTab }}>
       <div>
       <nav style={{
         position: "sticky",
@@ -95,6 +96,22 @@ function App() {
           >
             Resume Library
           </button>
+          <button
+            onClick={() => setActiveTab("jobs")}
+            style={{
+              padding: "8px 18px",
+              background: activeTab === "jobs" ? "#111" : "#fafaf8",
+              border: "1px solid " + (activeTab === "jobs" ? "#111" : "#e0e0d8"),
+              borderRadius: "8px",
+              fontSize: "0.82rem",
+              fontWeight: 600,
+              color: activeTab === "jobs" ? "#fff" : "#444",
+              cursor: "pointer",
+              transition: "all 0.15s"
+            }}
+          >
+            Jobs Tracker
+          </button>
         </div>
       </nav>
 
@@ -103,6 +120,9 @@ function App() {
       </div>
       <div style={{ display: activeTab === "library" ? "block" : "none" }}>
         <ResumeLibrary />
+      </div>
+      <div style={{ display: activeTab === "jobs" ? "block" : "none" }}>
+        <JobsTracker />
       </div>
     </div>
     </AppliedJobsContext.Provider>

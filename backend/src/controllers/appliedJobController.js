@@ -142,8 +142,10 @@ const updateJobStatus = async (req, res) => {
 
     res.json({
       message: "Job status updated successfully",
-      status: appliedJob.status,
-      statusUpdatedAt: appliedJob.statusUpdatedAt
+      job: {
+        status: appliedJob.status,
+        statusUpdatedAt: appliedJob.statusUpdatedAt
+      }
     });
 
   } catch (error) {
@@ -152,4 +154,35 @@ const updateJobStatus = async (req, res) => {
   }
 };
 
-module.exports = { markJobAsApplied, unmarkJobAsApplied, getAppliedJobs, checkIfApplied, updateJobStatus };
+const getAllAppliedJobs = async (req, res) => {
+  try {
+    const { search } = req.query;
+    
+    let query = {};
+    
+    // If search term provided, search in jobTitle, company
+    if (search) {
+      query = {
+        $or: [
+          { jobTitle: { $regex: search, $options: 'i' } },
+          { company: { $regex: search, $options: 'i' } }
+        ]
+      };
+    }
+    
+    const jobs = await AppliedJob.find(query)
+      .populate('resumeId', 'filename extractedData.name')
+      .sort({ appliedAt: -1 });
+    
+    res.json({ 
+      message: "All applied jobs retrieved",
+      count: jobs.length,
+      jobs 
+    });
+  } catch (error) {
+    console.error("Get all applied jobs error:", error.message);
+    res.status(500).json({ message: "Error retrieving applied jobs", error: error.message });
+  }
+};
+
+module.exports = { markJobAsApplied, unmarkJobAsApplied, getAppliedJobs, checkIfApplied, updateJobStatus, getAllAppliedJobs };
