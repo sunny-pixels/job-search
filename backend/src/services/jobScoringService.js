@@ -28,6 +28,80 @@ const extractRequiredExperience = (job) => {
 };
 
 /**
+ * Hard filter: Check if job is relevant to candidate's role
+ */
+const isJobRelevant = (job, resumeAnalysis) => {
+  const jobTitle = (job.title || "").toLowerCase();
+  const primaryRoles = (resumeAnalysis.primary_roles || []).map(r => String(r || "").toLowerCase()).filter(Boolean);
+  const jobKeywords = (resumeAnalysis.job_keywords || []).map(k => String(k || "").toLowerCase()).filter(Boolean);
+  const languages = (resumeAnalysis.programming_languages || []).map(l => String(l || "").toLowerCase()).filter(Boolean);
+  const frameworks = (resumeAnalysis.frameworks || []).map(f => String(f || "").toLowerCase()).filter(Boolean);
+  
+  // Define technical keywords that indicate a technical role
+  const technicalKeywords = [
+    'software', 'developer', 'engineer', 'programmer', 'coding', 'programming', 
+    'web', 'mobile', 'frontend', 'backend', 'fullstack', 'full-stack', 'full stack',
+    'data', 'ai', 'machine learning', 'ml', 'devops', 'qa', 'testing', 'architect', 
+    'technical', 'tech', 'sre', 'cloud', 'infrastructure', 'security', 'cyber',
+    'java', 'python', 'javascript', 'react', 'node', 'angular', 'vue', '.net',
+    'ios', 'android', 'embedded', 'firmware', 'hardware', 'robotics', 'automation'
+  ];
+  
+  // Define non-technical keywords that indicate a non-technical role
+  const nonTechnicalKeywords = [
+    'marketing', 'sales', 'hr', 'human resources', 'finance', 'accounting', 
+    'legal', 'law', 'clerk', 'administrative', 'admin', 'customer service', 
+    'support', 'business development', 'operations', 'logistics', 'procurement',
+    'content writer', 'copywriter', 'graphic design', 'ui designer', 'ux designer',
+    'social media', 'seo', 'sem', 'digital marketing', 'brand', 'communications',
+    'recruiter', 'talent', 'payroll', 'compliance', 'audit', 'paralegal',
+    'manufacturing', 'production', 'supply chain', 'warehouse', 'inventory',
+    'e-commerce', 'ecommerce', 'retail', 'merchandising', 'buyer', 'purchasing',
+    'media', 'journalism', 'editorial', 'publishing', 'advertising', 'ads',
+    'event', 'hospitality', 'tourism', 'travel', 'real estate', 'property',
+    'healthcare', 'medical', 'nursing', 'clinical', 'pharmaceutical', 'biotech',
+    'education', 'teaching', 'training', 'instructor', 'tutor', 'academic'
+  ];
+  
+  // Check if candidate has technical background
+  const candidateIsTechnical = 
+    primaryRoles.some(role => technicalKeywords.some(tech => role.includes(tech))) ||
+    jobKeywords.some(keyword => technicalKeywords.some(tech => keyword.includes(tech))) ||
+    languages.length > 0 || 
+    frameworks.length > 0;
+  
+  // If candidate is NOT technical, allow all jobs
+  if (!candidateIsTechnical) {
+    return true;
+  }
+  
+  // Candidate IS technical - now we need stricter filtering
+  
+  // Check if job has ANY technical keywords
+  const jobHasTechnicalKeywords = technicalKeywords.some(tech => jobTitle.includes(tech));
+  
+  // Check if job has non-technical keywords
+  const jobHasNonTechnicalKeywords = nonTechnicalKeywords.some(nonTech => jobTitle.includes(nonTech));
+  
+  // RULE 1: If job has technical keywords, it's relevant (even if it also has non-technical words)
+  // Example: "Software Engineer - Marketing Team" is still technical
+  if (jobHasTechnicalKeywords) {
+    return true;
+  }
+  
+  // RULE 2: If job has NO technical keywords but HAS non-technical keywords, filter it out
+  // Example: "Marketing Intern", "HR Intern", "Legal Intern" - all filtered
+  if (!jobHasTechnicalKeywords && jobHasNonTechnicalKeywords) {
+    console.log(`  🚫 Filtered: "${job.title}" (non-technical role for technical candidate)`);
+    return false;
+  }
+  
+  // RULE 3: If job has neither technical nor non-technical keywords, allow it
+  // This catches generic roles that might be relevant
+  return true;
+};
+
+/**
  * Hard filter: Check if candidate meets minimum experience requirement
  */
 const meetsExperienceRequirement = (job, candidateYears) => {
@@ -177,8 +251,12 @@ const scoreAndSortJobs = (jobs, resumeAnalysis) => {
   
   const experienceYears = resumeAnalysis.experience_years || 0;
   
-  // HARD FILTER: Remove jobs candidate doesn't qualify for
-  const qualifyingJobs = jobs.filter(job => {
+  // HARD FILTER 1: Remove irrelevant jobs (technical vs non-technical mismatch)
+  const relevantJobs = jobs.filter(job => isJobRelevant(job, resumeAnalysis));
+  console.log(`✅ Relevant: ${relevantJobs.length}/${jobs.length} jobs (filtered out ${jobs.length - relevantJobs.length} irrelevant)`);
+  
+  // HARD FILTER 2: Remove jobs candidate doesn't qualify for by experience
+  const qualifyingJobs = relevantJobs.filter(job => {
     const qualifies = meetsExperienceRequirement(job, experienceYears);
     if (!qualifies) {
       const required = extractRequiredExperience(job);
@@ -187,7 +265,7 @@ const scoreAndSortJobs = (jobs, resumeAnalysis) => {
     return qualifies;
   });
   
-  console.log(`✅ Qualified: ${qualifyingJobs.length}/${jobs.length} jobs`);
+  console.log(`✅ Qualified: ${qualifyingJobs.length}/${relevantJobs.length} jobs (after experience filter)`);
   
   // Score all qualifying jobs with fast rule-based algorithm
   const scoredJobs = qualifyingJobs.map(job => ({
@@ -198,7 +276,7 @@ const scoreAndSortJobs = (jobs, resumeAnalysis) => {
   // Sort by score (highest first)
   scoredJobs.sort((a, b) => b.match_score - a.match_score);
   
-  console.log(`✅ Scoring complete in < 1s. Top score: ${scoredJobs[0]?.match_score}%`);
+  console.log(`✅ Scoring complete. Top score: ${scoredJobs[0]?.match_score}% | Total results: ${scoredJobs.length}`);
   
   return scoredJobs;
 };

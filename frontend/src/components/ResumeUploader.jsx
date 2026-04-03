@@ -1011,10 +1011,10 @@ export default function ResumeUploader() {
           <div className="hero-inner">
             <div className="hero-eyebrow">
               <span className="hero-eyebrow-dot" />
-              Powered by AI Resume Analysis
+              Smart Resume Matching
             </div>
             <h1 className="hero-title">Find jobs that actually <em>fit you</em></h1>
-            <p className="hero-desc">Upload your resume and let our AI match you to thousands of curated roles — ranked by how well they align with your experience.</p>
+            <p className="hero-desc">Upload your resume and let our Software match you to thousands of curated roles — ranked by how well they align with your experience.</p>
             <div className="hero-stats">
               <div className="hero-stat">
                 <div className="hero-stat-num">10K+</div>
@@ -1027,8 +1027,8 @@ export default function ResumeUploader() {
               </div>
               <div className="hero-stat-divider" />
               <div className="hero-stat">
-                <div className="hero-stat-num">AI</div>
-                <div className="hero-stat-label">Powered Matching</div>
+                <div className="hero-stat-num">&lt;30s</div>
+                <div className="hero-stat-label">Get Results</div>
               </div>
             </div>
           </div>

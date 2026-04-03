@@ -280,7 +280,7 @@ function App() {
           <div className="nav-right">
             <div className="nav-badge">
               <span className="badge-dot" />
-              AI Powered
+              Smart Matching
             </div>
           </div>
         </div>

@@ -54,8 +54,37 @@ const runPython = (scriptPath, args = []) => {
  */
 const searchJobSpyJobs = (primaryRoles) => {
   console.log("🚀 [JobSpy] Fetching from Indeed + LinkedIn...");
+  
+  // Improve search terms by combining role components intelligently
+  const improvedSearchTerms = [];
+  
+  for (const role of primaryRoles) {
+    const roleLower = role.toLowerCase();
+    
+    // For compound roles like "software developer, intern", create specific combinations
+    if (roleLower.includes(',')) {
+      const parts = roleLower.split(',').map(p => p.trim());
+      if (parts.length === 2) {
+        // Create combined search term: "software developer intern"
+        const combined = parts.join(' ');
+        improvedSearchTerms.push(combined);
+        console.log(`  🔄 Transformed "${role}" → "${combined}"`);
+      } else {
+        // Multiple parts, just join them
+        improvedSearchTerms.push(parts.join(' '));
+      }
+    } else {
+      // No comma, use as-is
+      improvedSearchTerms.push(role);
+    }
+  }
+  
+  // Remove duplicates and use improved search terms
+  const uniqueSearchTerms = [...new Set(improvedSearchTerms)];
+  console.log("🔍 Final search terms:", uniqueSearchTerms);
+  
   const scriptPath = path.join(SCRAPER_DIR, "jobspy_scraper.py");
-  return runPython(scriptPath, [JSON.stringify(primaryRoles)]);
+  return runPython(scriptPath, [JSON.stringify(uniqueSearchTerms)]);
 };
 
 /**
@@ -63,7 +92,21 @@ const searchJobSpyJobs = (primaryRoles) => {
  */
 const searchGreenhouseJobs = (jobKeywords, primaryRoles) => {
   console.log("🏢 [Greenhouse] Fetching from company boards...");
-  const searchTerms = [...new Set([...jobKeywords, ...primaryRoles])];
+  
+  // Process primary roles to combine comma-separated parts
+  const processedRoles = [];
+  for (const role of primaryRoles) {
+    if (role.toLowerCase().includes(',')) {
+      const parts = role.split(',').map(p => p.trim());
+      processedRoles.push(parts.join(' ')); // Combine parts
+    } else {
+      processedRoles.push(role);
+    }
+  }
+  
+  const searchTerms = [...new Set([...jobKeywords, ...processedRoles])];
+  console.log("🔍 Greenhouse search terms:", searchTerms);
+  
   const scriptPath = path.join(SCRAPER_DIR, "greenhouse_matcher.py");
   return runPython(scriptPath, [JSON.stringify(searchTerms)]);
 };
