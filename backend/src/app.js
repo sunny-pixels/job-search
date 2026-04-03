@@ -10,13 +10,17 @@ const { errorHandler } = require("./middleware/errorHandler");
 
 const app = express();
 
-// ✅ MongoDB Connection
-mongoose.connect(process.env.MONGODB_URI)
+// ✅ MongoDB Connection with proper options
+mongoose.connect(process.env.MONGODB_URI, {
+    serverSelectionTimeoutMS: 30000, // Increase timeout to 30 seconds
+    socketTimeoutMS: 45000,
+})
 .then(() => {
     console.log("✅ MongoDB Connected Successfully");
 })
 .catch((err) => {
     console.log("❌ MongoDB Connection Failed:", err.message);
+    process.exit(1); // Exit if MongoDB fails
 });
 
 // Middleware
@@ -25,6 +29,14 @@ app.use(express.json());
 
 // Serve uploaded files
 app.use("/uploads", express.static("uploads"));
+
+// Health check endpoint (doesn't require MongoDB)
+app.get("/health", (req, res) => {
+    res.json({ 
+        status: "ok", 
+        mongodb: mongoose.connection.readyState === 1 ? "connected" : "disconnected" 
+    });
+});
 
 // Routes
 app.use("/api/resume", resumeRoutes);
