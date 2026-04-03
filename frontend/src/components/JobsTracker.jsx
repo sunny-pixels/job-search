@@ -1,6 +1,8 @@
 import { useState, useEffect, useContext } from "react";
 import { AppliedJobsContext } from "../App.jsx";
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
 export default function JobsTracker() {
   const { appliedJobsRefreshTrigger, triggerAppliedJobsRefresh } = useContext(AppliedJobsContext);
   const [jobs, setJobs] = useState([]);
@@ -23,8 +25,8 @@ export default function JobsTracker() {
     setLoading(true);
     try {
       const url = search
-        ? `http://localhost:3001/api/applied-jobs/all?search=${encodeURIComponent(search)}`
-        : `http://localhost:3001/api/applied-jobs/all`;
+        ? `${API_URL}/api/applied-jobs/all?search=${encodeURIComponent(search)}`
+        : `${API_URL}/api/applied-jobs/all`;
       const res = await fetch(url);
       if (!res.ok) throw new Error("Failed");
       const data = await res.json();
@@ -35,7 +37,7 @@ export default function JobsTracker() {
 
   const updateJobStatus = async (resumeId, jobId, status) => {
     try {
-      const res = await fetch("http://localhost:3001/api/applied-jobs/update-status", {
+      const res = await fetch(`${API_URL}/api/applied-jobs/update-status`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ resumeId, jobId, status })

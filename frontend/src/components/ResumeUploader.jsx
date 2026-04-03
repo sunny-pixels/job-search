@@ -1,6 +1,8 @@
 import { useState, useRef, useCallback, useContext, useEffect } from "react";
 import { AppliedJobsContext } from "../App.jsx";
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
 export default function ResumeUploader() {
   const { triggerAppliedJobsRefresh, triggerResumeUpload } = useContext(AppliedJobsContext);
   const [file, setFile] = useState(null);
@@ -73,7 +75,7 @@ export default function ResumeUploader() {
     if (!resumeId || jobs.length === 0) return;
     const jobIds = jobs.map(job => `${job.company}_${job.title}_${job.location}`);
     try {
-      const res = await fetch("http://localhost:3001/api/applied-jobs/check", {
+      const res = await fetch(`${API_URL}/api/applied-jobs/check`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ resumeId, jobIds })
@@ -91,7 +93,7 @@ export default function ResumeUploader() {
     if (!resumeId) return;
     const jobId = `${job.company}_${job.title}_${job.location}`;
     try {
-      const res = await fetch("http://localhost:3001/api/applied-jobs/mark-applied", {
+      const res = await fetch(`${API_URL}/api/applied-jobs/mark-applied`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ resumeId, jobId, jobTitle: job.title, company: job.company, jobUrl: job.job_url })
@@ -107,7 +109,7 @@ export default function ResumeUploader() {
     if (!resumeId) return;
     const jobId = `${job.company}_${job.title}_${job.location}`;
     try {
-      const res = await fetch("http://localhost:3001/api/applied-jobs/unmark-applied", {
+      const res = await fetch(`${API_URL}/api/applied-jobs/unmark-applied`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ resumeId, jobId })
@@ -123,7 +125,7 @@ export default function ResumeUploader() {
     if (pageCache.current[page] || prefetchingPages.current.has(page)) return;
     prefetchingPages.current.add(page);
     try {
-      const res = await fetch(`http://localhost:3001/api/resume/jobs?page=${page}&limit=12`);
+      const res = await fetch(`${API_URL}/api/resume/jobs?page=${page}&limit=12`);
       if (!res.ok) return;
       const data = await res.json();
       pageCache.current[page] = { jobs: data.jobs || [], pagination: data.pagination, scoreDistribution: data.score_distribution };
@@ -143,7 +145,7 @@ export default function ResumeUploader() {
     }
     if (showLoader) setLoadingJobs(true);
     try {
-      const res = await fetch(`http://localhost:3001/api/resume/jobs?page=${page}&limit=12`);
+      const res = await fetch(`${API_URL}/api/resume/jobs?page=${page}&limit=12`);
       if (!res.ok) throw new Error(`Status: ${res.status}`);
       const data = await res.json();
       const entry = { jobs: data.jobs || [], pagination: data.pagination, scoreDistribution: data.score_distribution };
@@ -182,7 +184,7 @@ export default function ResumeUploader() {
     const formData = new FormData();
     formData.append("resume", file);
     try {
-      const res = await fetch("http://localhost:3001/api/resume/upload", { method: "POST", body: formData });
+      const res = await fetch(`${API_URL}/api/resume/upload`, { method: "POST", body: formData });
       if (!res.ok) throw new Error(`Status: ${res.status}`);
       const data = await res.json();
       setMessage({ text: "Resume analysed successfully!", type: "success" });

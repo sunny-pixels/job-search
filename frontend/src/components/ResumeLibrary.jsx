@@ -1,6 +1,8 @@
 import { useState, useEffect, useContext } from "react";
 import { AppliedJobsContext } from "../App.jsx";
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
 export default function ResumeLibrary() {
   const { appliedJobsRefreshTrigger, resumeUploadTrigger, activeTab } = useContext(AppliedJobsContext);
   const [resumes, setResumes] = useState([]);
@@ -24,7 +26,7 @@ export default function ResumeLibrary() {
   const fetchAllResumes = async () => {
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:3001/api/resume/all");
+      const res = await fetch(`${API_URL}/api/resume/all`);
       if (!res.ok) throw new Error("Failed");
       const data = await res.json();
       setResumes(data.resumes || []);
@@ -35,7 +37,7 @@ export default function ResumeLibrary() {
   const fetchAppliedJobs = async (resumeId, force = false) => {
     if (appliedJobs[resumeId] && !force) return;
     try {
-      const res = await fetch(`http://localhost:3001/api/applied-jobs/${resumeId}`);
+      const res = await fetch(`${API_URL}/api/applied-jobs/${resumeId}`);
       if (!res.ok) throw new Error("Failed");
       const data = await res.json();
       setAppliedJobs(prev => ({ ...prev, [resumeId]: data.jobs || [] }));
@@ -56,7 +58,7 @@ export default function ResumeLibrary() {
 
   const updateJobStatus = async (resumeId, jobId, status) => {
     try {
-      const res = await fetch("http://localhost:3001/api/applied-jobs/update-status", {
+      const res = await fetch(`${API_URL}/api/applied-jobs/update-status`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ resumeId, jobId, status })
