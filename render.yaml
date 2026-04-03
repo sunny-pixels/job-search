@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: resume-agent-backend
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: |
+      cd backend && npm install
+      pip install -r ../scraper-service/requirements.txt
+    startCommand: cd backend && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: MONGODB_URI
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
