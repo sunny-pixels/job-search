@@ -14,6 +14,7 @@ export default function ResumeUploader() {
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [loadingJobs, setLoadingJobs] = useState(false);
+  const [jobProgress, setJobProgress] = useState({ message: '', progress: 0 });
   const [appliedJobs, setAppliedJobs] = useState(new Set());
   const [resumeId, setResumeId] = useState(null);
   const [savedFileName, setSavedFileName] = useState(null);
@@ -163,8 +164,28 @@ export default function ResumeUploader() {
   const fetchMatchingJobs = useCallback(async (page = 1) => {
     pageCache.current = {};
     prefetchingPages.current.clear();
-    await showPage(page, true);
-    if (resumeId) checkAppliedStatus();
+    setLoadingJobs(true);
+    setJobProgress({ message: 'Starting job search...', progress: 10 });
+    
+    // Poll progress endpoint
+    const progressInterval = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/resume/jobs/progress`);
+        if (res.ok) {
+          const data = await res.json();
+          setJobProgress({ message: data.message || '', progress: data.progress || 0 });
+        }
+      } catch {}
+    }, 1000);
+    
+    try {
+      await showPage(page, false);
+      if (resumeId) checkAppliedStatus();
+    } finally {
+      clearInterval(progressInterval);
+      setLoadingJobs(false);
+      setJobProgress({ message: '', progress: 0 });
+    }
   }, [showPage, resumeId]);
 
   const handlePageChange = useCallback(async (page) => {
@@ -410,7 +431,12 @@ export default function ResumeUploader() {
                       <div className="loading-dots">
                         <div className="dot" /><div className="dot" /><div className="dot" />
                       </div>
-                      <div className="loading-text">Searching for your best matches…</div>
+                      <div className="loading-text">{jobProgress.message || 'Searching for your best matches…'}</div>
+                      {jobProgress.progress > 0 && (
+                        <div className="progress-bar-container">
+                          <div className="progress-bar" style={{ width: `${jobProgress.progress}%` }} />
+                        </div>
+                      )}
                     </div>
                   )}
 

@@ -3,6 +3,10 @@ const path = require("path");
 
 const SCRAPER_DIR = path.join(__dirname, "../../../scraper-service");
 
+// Job cache: { key: { jobs: [], timestamp: Date } }
+const jobCache = new Map();
+const CACHE_DURATION_MS = 60 * 60 * 1000; // 1 hour
+
 /**
  * Run a Python script and return parsed JSON from stdout
  */
@@ -115,8 +119,22 @@ const searchGreenhouseJobs = (jobKeywords, primaryRoles) => {
  * Fetch all jobs: JobSpy first (priority), Greenhouse second.
  * Deduplicates by job URL.
  * Returns merged array with source tag.
+ * Implements 1-hour caching to avoid re-scraping.
  */
 const fetchAllJobs = async (jobKeywords, primaryRoles) => {
+  // Create cache key from search terms
+  const cacheKey = JSON.stringify({ jobKeywords: jobKeywords.sort(), primaryRoles: primaryRoles.sort() });
+  
+  // Check cache first
+  const cached = jobCache.get(cacheKey);
+  if (cached && (Date.now() - cached.timestamp < CACHE_DURATION_MS)) {
+    const age = Math.round((Date.now() - cached.timestamp) / 1000 / 60);
+    console.log(`💾 Using cached jobs (${cached.jobs.length} jobs, ${age} min old)`);
+    return cached.jobs;
+  }
+  
+  console.log("🔍 Cache miss or expired, fetching fresh jobs...");
+  
   // Run both in parallel
   const [jobSpyJobs, greenhouseJobs] = await Promise.all([
     searchJobSpyJobs(primaryRoles),
@@ -147,6 +165,11 @@ const fetchAllJobs = async (jobKeywords, primaryRoles) => {
   }
 
   console.log(`✅ Total merged: ${merged.length} unique jobs`);
+  
+  // Store in cache
+  jobCache.set(cacheKey, { jobs: merged, timestamp: Date.now() });
+  console.log(`💾 Cached ${merged.length} jobs for 1 hour`);
+  
   return merged;
 };
 

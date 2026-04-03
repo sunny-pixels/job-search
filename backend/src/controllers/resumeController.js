@@ -9,6 +9,7 @@ const crypto = require("crypto");
 // In-memory store
 let lastAnalyzedResume = null;
 let cachedScoredJobs = null; // cache all scored jobs — cleared on new upload
+let jobFetchProgress = { status: 'idle', message: '', progress: 0 }; // progress tracking
 
 const uploadResume = async (req, res) => {
   try {
@@ -264,22 +265,40 @@ const getMatchingJobs = async (req, res) => {
       return sendPaginatedResponse(res, cachedScoredJobs, page, limit, job_keywords, primary_roles);
     }
 
+    // Update progress
+    jobFetchProgress = { status: 'fetching', message: 'Searching jobs...', progress: 20 };
+    
     console.log("🔍 Fetching jobs from JobSpy + Greenhouse...");
     const allJobs = await fetchAllJobs(job_keywords, primary_roles);
     console.log(`📊 Found ${allJobs.length} total jobs, scoring...`);
 
+    // Update progress
+    jobFetchProgress = { status: 'scoring', message: 'Scoring matches...', progress: 60 };
+    
     const scoredJobs = scoreAndSortJobs(allJobs, lastAnalyzedResume.analysis);
+    
+    // Limit to top 100 jobs for performance
+    const limitedJobs = scoredJobs.slice(0, 100);
+    console.log(`✂️ Limited to top ${limitedJobs.length} jobs (from ${scoredJobs.length})`);
 
     // Store in cache for all subsequent page requests
-    cachedScoredJobs = scoredJobs;
-    console.log(`💾 Cached ${scoredJobs.length} scored jobs`);
+    cachedScoredJobs = limitedJobs;
+    console.log(`💾 Cached ${limitedJobs.length} scored jobs`);
 
-    return sendPaginatedResponse(res, scoredJobs, page, limit, job_keywords, primary_roles);
+    // Update progress
+    jobFetchProgress = { status: 'complete', message: 'Complete', progress: 100 };
+
+    return sendPaginatedResponse(res, limitedJobs, page, limit, job_keywords, primary_roles);
 
   } catch (error) {
     console.error("Jobs error:", error.message);
+    jobFetchProgress = { status: 'error', message: error.message, progress: 0 };
     res.status(500).json({ message: "Error fetching jobs", error: error.message });
   }
+};
+
+const getJobProgress = (req, res) => {
+  res.json(jobFetchProgress);
 };
 
 const sendPaginatedResponse = (res, scoredJobs, page, limit, job_keywords, primary_roles) => {
@@ -313,4 +332,4 @@ const sendPaginatedResponse = (res, scoredJobs, page, limit, job_keywords, prima
   });
 };
 
-module.exports = { uploadResume, getResumeData, getAllResumes, getResumeById, getMatchingJobs };
+module.exports = { uploadResume, getResumeData, getAllResumes, getResumeById, getMatchingJobs, getJobProgress };

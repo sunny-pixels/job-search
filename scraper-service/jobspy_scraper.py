@@ -25,7 +25,7 @@ INDEED_COUNTRY_MAP = {
     "UAE": "UAE",
 }
 
-def scrape_for_role_country(role, country, results_per_role=20):
+def scrape_for_role_country(role, country, results_per_role=10):
     """Scrape jobs for a single role + country combination."""
     jobs_list = []
     try:

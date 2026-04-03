@@ -144,7 +144,7 @@ def main():
             return
 
         keywords = json.loads(sys.argv[1])
-        jobs = search_jobs_by_keywords(keywords, max_jobs=150)
+        jobs = search_jobs_by_keywords(keywords, max_jobs=50)
         print("__JSON_START__")
         print(json.dumps(jobs))
         print("__JSON_END__")
