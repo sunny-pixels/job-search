@@ -16,8 +16,10 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 # Load the model on startup
-logger.info("Loading Sentence Transformer model: all-mpnet-base-v2")
-model = SentenceTransformer('all-mpnet-base-v2')
+# Using smaller model for Render free tier (512MB RAM limit)
+# all-MiniLM-L6-v2: 80MB, 384 dimensions (vs all-mpnet-base-v2: 400MB, 768 dimensions)
+logger.info("Loading Sentence Transformer model: all-MiniLM-L6-v2")
+model = SentenceTransformer('all-MiniLM-L6-v2')
 logger.info("Model loaded successfully")
 
 @app.route('/health', methods=['GET'])
@@ -25,7 +27,7 @@ def health_check():
     """Health check endpoint"""
     return jsonify({
         'status': 'ok',
-        'model': 'all-mpnet-base-v2',
+        'model': 'all-MiniLM-L6-v2',
         'service': 'embedding-service'
     }), 200
 
