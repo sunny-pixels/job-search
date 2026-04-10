@@ -1824,3 +1824,20 @@ html, body {
   border-radius: 2px;
   transition: width 0.3s ease;
 }
+
+/* ── AI REASONING ── */
+.job-ai-reason {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  background: var(--off-white);
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  margin-top: 10px;
+  border-left: 3px solid var(--blue);
+}
+
+.job-ai-reason strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}

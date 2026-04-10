@@ -26,7 +26,7 @@ export default function ResumeLibrary() {
   const fetchAllResumes = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/resume/all`);
+      const res = await fetch(`${API_URL}/api/embedding-matcher/all`);
       if (!res.ok) throw new Error("Failed");
       const data = await res.json();
       setResumes(data.resumes || []);
@@ -158,7 +158,7 @@ export default function ResumeLibrary() {
                       </svg>
                     </div>
                     <div className="resume-card-info">
-                      <div className="resume-filename">{resume.filename}</div>
+                      <div className="resume-filename">{resume.fileName}</div>
                       <div className="resume-meta-row">
                         <span className="resume-date">Uploaded {formatDate(resume.uploadedAt)}</span>
                         <span className="resume-level-badge">{resume.extractedData?.experience_level || "N/A"}</span>

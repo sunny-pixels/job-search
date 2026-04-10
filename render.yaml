@@ -1,17 +1,36 @@
 services:
+  # Embedding Service (Python/Flask)
   - type: web
-    name: resume-agent-backend
+    name: jobsphere-embedding-service
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r embedding-service/requirements.txt
+    startCommand: cd embedding-service && gunicorn --bind 0.0.0.0:$PORT --workers 1 --timeout 120 app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: PORT
+        value: 5001
+
+  # Backend Service (Node.js/Express)
+  - type: web
+    name: jobsphere-backend
     env: node
     region: oregon
     plan: free
-    buildCommand: |
-      cd backend && npm install
-      cd ../scraper-service && pip install -r requirements.txt
+    buildCommand: cd backend && npm install
     startCommand: cd backend && npm start
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PORT
+        value: 3001
       - key: MONGODB_URI
         sync: false
       - key: GROQ_API_KEY
         sync: false
+      - key: RAPIDAPI_KEY
+        sync: false
+      - key: EMBEDDING_SERVICE_URL
+        value: https://jobsphere-embedding-service.onrender.com

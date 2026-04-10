@@ -1,5 +1,8 @@
 import { useState, createContext } from "react";
-import ResumeUploader from "./components/ResumeUploader.jsx";
+
+// Embedding-based scoring (Fast semantic matching)
+import ResumeUploaderEmbedding from "./components/ResumeUploaderEmbedding.jsx";
+
 import ResumeLibrary from "./components/ResumeLibrary.jsx";
 import JobsTracker from "./components/JobsTracker.jsx";
 import "./App.css";
@@ -91,14 +94,16 @@ function App() {
           <div className="nav-right">
             <div className="nav-badge">
               <span className="badge-dot" />
-              Smart Matching
+              Embedding Matching
             </div>
           </div>
         </div>
       </nav>
 
       {activeTab === "uploader" && (
-        <div className="tab-panel"><ResumeUploader /></div>
+        <div className="tab-panel">
+          <ResumeUploaderEmbedding />
+        </div>
       )}
       {activeTab === "library" && (
         <div className="tab-panel"><ResumeLibrary /></div>

@@ -4,8 +4,8 @@ const express = require("express");
 const cors = require("cors");
 const mongoose = require("mongoose");
 
-const resumeRoutes = require("./routes/resumeRoutes");
 const appliedJobRoutes = require("./routes/appliedJobRoutes");
+const embeddingResumeRoutes = require("./routes/embeddingResumeRoutes"); // Embedding-based routes
 const { errorHandler } = require("./middleware/errorHandler");
 
 const app = express();
@@ -39,8 +39,8 @@ app.get("/health", (req, res) => {
 });
 
 // Routes
-app.use("/api/resume", resumeRoutes);
 app.use("/api/applied-jobs", appliedJobRoutes);
+app.use("/api/embedding-matcher", embeddingResumeRoutes); // Embedding-based matching
 
 // Error handling middleware
 app.use(errorHandler);

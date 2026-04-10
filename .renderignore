@@ -1,0 +1,58 @@
+# Render Ignore File
+# Files and directories to exclude from deployment
+
+# Documentation
+*.md
+!README.md
+
+# Development files
+.DS_Store
+.vscode/
+.idea/
+
+# Frontend (deployed separately on Vercel)
+frontend/
+
+# Resume folder (not needed in production)
+resume/
+
+# Git
+.git/
+.gitignore
+
+# Environment files (use Render dashboard for env vars)
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test files
+backend/test-*.js
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# Node modules (will be installed during build)
+node_modules/
+
+# Build outputs
+dist/
+build/
+*.tgz
+
+# OS files
+Thumbs.db
