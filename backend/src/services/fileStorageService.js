@@ -13,11 +13,19 @@ const saveFile = async (fileBuffer, originalName) => {
   const fileName = `${timestamp}_${sanitizedName}`;
   const filePath = path.join(uploadsDir, fileName);
   
+  // Determine file type
+  const ext = path.extname(originalName).toLowerCase();
+  const fileType = ext === '.docx' ? 'docx' : 'pdf';
+  
   await fs.promises.writeFile(filePath, fileBuffer);
+  
+  console.log(`✅ [FileStorage] Saved ${fileType.toUpperCase()} file:`, fileName);
   
   return {
     fileUrl: `/uploads/${fileName}`,
-    fileName: originalName
+    fileName: originalName,
+    fileType,
+    savedFileName: fileName
   };
 };
 

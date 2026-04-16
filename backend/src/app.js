@@ -6,6 +6,7 @@ const mongoose = require("mongoose");
 
 const appliedJobRoutes = require("./routes/appliedJobRoutes");
 const embeddingResumeRoutes = require("./routes/embeddingResumeRoutes"); // Embedding-based routes
+const tailoredResumeRoutes = require("./routes/tailoredResumeRoutes"); // AI Tailored Resume routes
 const { errorHandler } = require("./middleware/errorHandler");
 
 const app = express();
@@ -41,6 +42,7 @@ app.get("/health", (req, res) => {
 // Routes
 app.use("/api/applied-jobs", appliedJobRoutes);
 app.use("/api/embedding-matcher", embeddingResumeRoutes); // Embedding-based matching
+app.use("/api/tailored-resume", tailoredResumeRoutes); // AI Tailored Resume
 
 // Error handling middleware
 app.use(errorHandler);

@@ -1,5 +1,6 @@
 const axios = require('axios');
 const config = require('../config/config');
+const { updateFromHeaders } = require('./rateLimitTracker');
 
 /**
  * JSearch API Service - Fetch jobs from RapidAPI JSearch
@@ -38,6 +39,9 @@ const searchJobs = async (query, options = {}) => {
       timeout: 60000 // 60 second timeout for large page requests
     });
 
+    // Capture rate limit from response headers
+    updateFromHeaders(response.headers);
+
     if (response.data.status === 'OK' && response.data.data) {
       const jobs = response.data.data;
       console.log(`✅ [JSearch] Found ${jobs.length} jobs`);
@@ -75,6 +79,9 @@ const fetchJobDetails = async (jobId) => {
       },
       timeout: 10000
     });
+
+    // Capture rate limit from response headers
+    updateFromHeaders(response.headers);
 
     if (response.data.status === 'OK' && response.data.data && response.data.data.length > 0) {
       return response.data.data[0];

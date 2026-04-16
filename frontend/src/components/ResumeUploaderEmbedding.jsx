@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useContext, useEffect } from "react";
 import { AppliedJobsContext } from "../App.jsx";
+import TailorResumeModal from "./TailorResumeModal.jsx";
 
 // NEW: Embedding-based Resume Uploader (Fast Semantic Matching)
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -19,9 +20,24 @@ export default function ResumeUploaderEmbedding() {
   const [appliedJobs, setAppliedJobs] = useState(new Set());
   const [resumeId, setResumeId] = useState(null);
   const [savedFileName, setSavedFileName] = useState(null);
+  const [rateLimit, setRateLimit] = useState(null);
+  const [showTailorModal, setShowTailorModal] = useState(false);
+  const [selectedJob, setSelectedJob] = useState(null);
 
   const pageCache = useRef({});
   const prefetchingPages = useRef(new Set());
+
+  // Fetch rate limit
+  const fetchRateLimit = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/embedding-matcher/rate-limit`);
+      const data = await res.json();
+      console.log('📊 Rate limit data:', data);
+      setRateLimit(data);
+    } catch (err) {
+      console.error("Failed to fetch rate limit:", err);
+    }
+  }, []);
 
   // Load state from localStorage
   useEffect(() => {
@@ -66,6 +82,11 @@ export default function ResumeUploaderEmbedding() {
       }
     }
   }, [analysis, resumeId, jobs, pagination, scoreDistribution, currentPage, appliedJobs, file, savedFileName]);
+
+  // Fetch rate limit on mount and after uploads
+  useEffect(() => {
+    fetchRateLimit();
+  }, [fetchRateLimit, jobs]);
 
   const handleFileChange = (e) => setFile(e.target.files[0]);
 
@@ -146,7 +167,12 @@ export default function ResumeUploaderEmbedding() {
       const res = await fetch(`${API_URL}/api/embedding-matcher/jobs?page=${page}&limit=12`);
       if (!res.ok) throw new Error(`Status: ${res.status}`);
       const data = await res.json();
-      const entry = { jobs: data.jobs || [], pagination: data.pagination, scoreDistribution: data.score_distribution };
+      
+      const entry = { 
+        jobs: data.jobs || [], 
+        pagination: data.pagination, 
+        scoreDistribution: data.score_distribution
+      };
       pageCache.current[page] = entry;
       setJobs(entry.jobs);
       setPagination(entry.pagination);
@@ -225,6 +251,16 @@ export default function ResumeUploaderEmbedding() {
   const getScoreLabel = (s) => s >= 90 ? "Excellent" : s >= 80 ? "Great" : s >= 70 ? "Good" : s >= 60 ? "Fair" : "Low";
   const getCompanyLogo = (company) => `https://ui-avatars.com/api/?name=${encodeURIComponent(company)}&background=f5f5f3&color=0f0f0f&size=80&bold=true&font-size=0.45`;
 
+  const handleTailorClick = (job) => {
+    setSelectedJob(job);
+    setShowTailorModal(true);
+  };
+
+  const handleTailorSuccess = (tailoredResume) => {
+    console.log('✅ Tailored resume created:', tailoredResume);
+    // Could show a success message or update UI
+  };
+
   const renderPageNumbers = () => {
     if (!pagination) return null;
     const total = pagination.total_pages;
@@ -264,6 +300,17 @@ export default function ResumeUploaderEmbedding() {
               <div className="hero-stat-num">250+</div>
               <div className="hero-stat-label">Jobs Analyzed</div>
             </div>
+            {rateLimit && rateLimit.remaining !== null && rateLimit.limit !== null && (
+              <>
+                <div className="hero-stat-divider" />
+                <div className="hero-stat">
+                  <div className="hero-stat-num" style={{ color: rateLimit.remaining < 20 ? '#f44336' : rateLimit.remaining < 50 ? '#ff9800' : '#4caf50' }}>
+                    {rateLimit.remaining}
+                  </div>
+                  <div className="hero-stat-label">API Requests Left</div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -303,8 +350,8 @@ export default function ResumeUploaderEmbedding() {
                       <div className="upload-hint">Click to browse or drag & drop</div>
                       <div className="upload-formats">
                         <span className="format-tag">PDF</span>
-                        <span className="format-tag">DOC</span>
                         <span className="format-tag">DOCX</span>
+                        <span className="format-tag tip" title="DOCX files preserve formatting when tailored">✨ DOCX Recommended</span>
                       </div>
                     </>
                   )}
@@ -507,6 +554,19 @@ export default function ResumeUploaderEmbedding() {
                               <a href={job.job_apply_link} target="_blank" rel="noopener noreferrer" className="btn-apply">
                                 Apply Now →
                               </a>
+                              {job.embedding_match_score >= 50 && (
+                                <button 
+                                  className="btn-tailor" 
+                                  onClick={() => handleTailorClick(job)}
+                                  title="Generate AI-tailored resume for this job"
+                                >
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                                  </svg>
+                                  <span>AI Tailor Resume</span>
+                                </button>
+                              )}
                               {isApplied ? (
                                 <button className="btn-mark applied-state" onClick={() => unmarkAsApplied(job)} title="Click to undo">
                                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -551,6 +611,20 @@ export default function ResumeUploaderEmbedding() {
           )}
         </div>
       </div>
+
+      {/* AI Tailor Resume Modal */}
+      {showTailorModal && selectedJob && (
+        <TailorResumeModal
+          job={selectedJob}
+          resumeId={resumeId}
+          originalScore={selectedJob.embedding_match_score}
+          onClose={() => {
+            setShowTailorModal(false);
+            setSelectedJob(null);
+          }}
+          onSuccess={handleTailorSuccess}
+        />
+      )}
     </div>
   );
 }

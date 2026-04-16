@@ -9,6 +9,11 @@ const resumeSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  fileType: {
+    type: String,
+    enum: ['pdf', 'docx'],
+    default: 'pdf'
+  },
   fileHash: {
     type: String,
     required: true,

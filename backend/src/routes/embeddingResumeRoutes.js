@@ -11,6 +11,7 @@ const {
   getJobProgressEmbedding,
   getAllResumes
 } = require("../controllers/embeddingResumeController");
+const { getRateLimitInfo } = require("../services/rateLimitTracker");
 
 const router = express.Router();
 
@@ -21,10 +22,11 @@ const upload = multer({
     fileSize: 10 * 1024 * 1024 // 10MB limit
   },
   fileFilter: (req, file, cb) => {
-    if (file.mimetype === 'application/pdf') {
+    const allowedTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Only PDF files are allowed'));
+      cb(new Error('Only PDF and DOCX files are allowed'));
     }
   }
 });
@@ -33,6 +35,9 @@ const upload = multer({
 router.post("/upload", upload.single("resume"), uploadResumeEmbedding);
 router.get("/jobs", getMatchingJobsEmbedding);
 router.get("/jobs/progress", getJobProgressEmbedding);
-router.get("/all", getAllResumes); // Get all resumes
+router.get("/all", getAllResumes);
+router.get("/rate-limit", (req, res) => {
+  res.json(getRateLimitInfo());
+});
 
 module.exports = router;

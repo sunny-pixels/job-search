@@ -504,7 +504,7 @@ const matchJobsWithEmbeddings = async (resumeText, jobs, resumeAnalysis, options
         // Raw 50% → Rescaled 50% (human: "fair match, worth considering")
         // Raw 40% → Rescaled 25% (human: "weak match")
         // Range: [0.3-0.7] → [0-1] for human-aligned perception
-        const rescaledSimilarity = Math.max(0, Math.min(1, (rawSimilarity - 0.3) / 0.4));
+        const rescaledSimilarity = Math.max(0, Math.min(1, (rawSimilarity - 0.2) / 0.4));
         
         // Step 2: Calculate experience score (can be 0 to 1.1)
         const requiredYears = phase1Data.jobExp.minYears > 0 

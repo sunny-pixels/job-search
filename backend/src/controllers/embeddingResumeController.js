@@ -3,7 +3,7 @@
  * NEW controller for embedding-based job matching (does not modify existing aiResumeController.js)
  */
 
-const { extractTextFromPDF } = require("../services/pdfService");
+const { extractTextFromPDF, extractTextFromFile } = require("../services/pdfService");
 const { analyzeResumeWithGroq } = require("../services/groqService");
 const { searchMultipleQueries, buildSearchQueries, enrichJobsWithDetails } = require("../services/jsearchService");
 const { matchJobsWithEmbeddings } = require("../services/embeddingMatcherService");
@@ -42,25 +42,31 @@ const uploadResumeEmbedding = async (req, res) => {
     if (existingResume) {
       console.log("⚠️ [Embedding] Duplicate detected");
       
-      // Check if resumeFullText exists, if not, re-extract it
-      let resumeFullText = existingResume.extractedData.resumeFullText;
+      // Determine new file type
+      const newFileType = req.file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ? 'docx' : 'pdf';
+      const existingFileType = existingResume.fileType;
       
-      if (!resumeFullText || resumeFullText.trim().length === 0) {
-        console.log("📄 [Embedding] Resume text missing, re-extracting from PDF...");
-        try {
-          resumeFullText = await extractTextFromPDF(req.file.buffer);
-          
-          // Update the database with the full text
-          existingResume.extractedData.resumeFullText = resumeFullText;
-          await existingResume.save();
-          console.log("✅ [Embedding] Resume text updated in database");
-        } catch (error) {
-          console.error("❌ [Embedding] Failed to extract text:", error.message);
-          return res.status(500).json({ 
-            message: "Failed to process resume text",
-            error: error.message 
-          });
-        }
+      // Extract text from the NEW upload
+      console.log(`📄 [Embedding] Extracting text from new ${newFileType.toUpperCase()} upload...`);
+      const resumeText = await extractTextFromFile(req.file.buffer, newFileType);
+      
+      // If uploading DOCX (regardless of what existed before), save it
+      if (newFileType === 'docx') {
+        console.log("📄 [Embedding] Saving DOCX file for format preservation...");
+        const { fileUrl, fileName, fileType, savedFileName } = await saveFile(req.file.buffer, req.file.originalname);
+        
+        // Update database with new file info
+        existingResume.fileUrl = fileUrl;
+        existingResume.fileName = fileName;
+        existingResume.fileType = fileType;
+        existingResume.extractedData.resumeFullText = resumeText;
+        await existingResume.save();
+        console.log("✅ [Embedding] Updated to DOCX file");
+      } else if (!existingResume.extractedData.resumeFullText || existingResume.extractedData.resumeFullText.trim().length === 0) {
+        // For PDF, only update text if missing
+        existingResume.extractedData.resumeFullText = resumeText;
+        await existingResume.save();
+        console.log("✅ [Embedding] Updated resume text");
       }
       
       lastAnalyzedResumeEmbedding = {
@@ -78,7 +84,7 @@ const uploadResumeEmbedding = async (req, res) => {
           summary: existingResume.extractedData.summary,
           education: existingResume.extractedData.education.map(e => `${e.degree}, ${e.college}, ${e.year}`),
         },
-        resumeFullText: resumeFullText,
+        resumeFullText: resumeText,
         _id: existingResume._id
       };
 
@@ -93,14 +99,19 @@ const uploadResumeEmbedding = async (req, res) => {
       });
     }
 
-    console.log("📄 [Embedding] Extracting text from PDF...");
-    const resumeText = await extractTextFromPDF(req.file.buffer);
+    console.log("📄 [Embedding] Extracting text from file...");
+    
+    // Determine file type from mimetype
+    const detectedFileType = req.file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ? 'docx' : 'pdf';
+    console.log(`📄 [Embedding] File type detected: ${detectedFileType.toUpperCase()}`);
+    
+    const resumeText = await extractTextFromFile(req.file.buffer, detectedFileType);
 
     console.log("🤖 [Embedding] Analyzing resume with Groq...");
     const analysisData = await analyzeResumeWithGroq(resumeText);
 
-    console.log("💾 [Embedding] Saving PDF file...");
-    const { fileUrl, fileName } = await saveFile(req.file.buffer, req.file.originalname);
+    console.log("💾 [Embedding] Saving file...");
+    const { fileUrl, fileName, fileType, savedFileName } = await saveFile(req.file.buffer, req.file.originalname);
 
     // Extract name, email, phone
     const emailMatch = resumeText.match(/[\w.-]+@[\w.-]+\.\w+/);
@@ -132,6 +143,7 @@ const uploadResumeEmbedding = async (req, res) => {
     const resumeDoc = new Resume({
       fileUrl,
       fileName,
+      fileType,
       fileHash,
       extractedData: {
         name: extractedName,
@@ -211,7 +223,7 @@ const getMatchingJobsEmbedding = async (req, res) => {
     const searchData = buildSearchQueries(lastAnalyzedResumeEmbedding.analysis);
     
     const allJobs = await searchMultipleQueries(searchData.queries, {
-      num_pages: 5, // 1 page = 10 jobs per query - reduced to avoid rate limits
+      num_pages: 1, // 1 page = 10 jobs per query - reduced to avoid rate limits
       date_posted: 'month',
       country: 'us',
       job_requirements: searchData.requirements // Filter by experience level
@@ -281,6 +293,9 @@ const sendPaginatedResponseEmbedding = (res, scoredJobs, page, limit) => {
   const totalPages = Math.ceil(totalJobs / limit);
   const startIndex = (page - 1) * limit;
   const paginatedJobs = scoredJobs.slice(startIndex, startIndex + limit);
+
+  console.log(`📄 [Pagination] Page ${page}, Limit ${limit}, Start ${startIndex}, End ${startIndex + limit}`);
+  console.log(`📄 [Pagination] Total jobs: ${totalJobs}, Returning: ${paginatedJobs.length} jobs`);
 
   const scoreRanges = {
     excellent: scoredJobs.filter(j => j.embedding_match_score >= 90).length,
