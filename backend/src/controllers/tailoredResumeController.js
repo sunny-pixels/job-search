@@ -12,6 +12,7 @@ const {
   estimateImprovedScore
 } = require("../services/resumeTailoringService");
 const { checkPythonServiceHealth, tailorDocxWithPython } = require("../services/pythonTailorService");
+const { checkGeminiServiceHealth, tailorDocxWithGemini } = require("../services/geminiTailorService");
 const path = require("path");
 const fs = require("fs").promises;
 
@@ -41,7 +42,79 @@ const createTailoredResume = async (req, res) => {
     const isDocx = resume.fileType === 'docx';
     
     if (isDocx) {
-      console.log('📄 [Tailored] DOCX file detected - checking Python service...');
+      console.log('📄 [Tailored] DOCX file detected - checking Gemini service...');
+      
+      // Check if Gemini service is available (preferred)
+      const geminiAvailable = await checkGeminiServiceHealth();
+      
+      if (geminiAvailable) {
+        console.log('🤖 [Tailored] Using Gemini service for intelligent tailoring');
+        
+        try {
+          // Get original DOCX file path
+          const docxPath = path.join(__dirname, '../../', resume.fileUrl);
+          
+          // Tailor using Gemini service
+          const tailoredBuffer = await tailorDocxWithGemini(docxPath, jobData);
+          
+          // Save tailored DOCX
+          const timestamp = Date.now();
+          const filename = `tailored_${resumeId}_${jobData.job_id}_${timestamp}.docx`;
+          const docxUrl = await saveDocxFile(tailoredBuffer, filename);
+          
+          // Estimate improved score
+          const estimatedScore = estimateImprovedScore(originalScore || 70);
+          
+          // Save to database
+          const modifications = [
+            { section: "skills", type: "added", description: "Added relevant skills from job description" },
+            { section: "experience", type: "enhanced", description: "Enhanced bullets with job-relevant keywords" },
+            { section: "content", type: "optimized", description: "Optimized content using Gemini AI" }
+          ];
+          
+          const tailoredResume = new TailoredResume({
+            originalResumeId: resumeId,
+            jobId: jobData.job_id,
+            jobTitle: jobData.job_title,
+            company: jobData.employer_name,
+            jobDescription: jobData.job_description?.substring(0, 2000),
+            tailoredContent: {
+              summary: "Content tailored using Gemini AI",
+              skills: [],
+              experience: [],
+              projects: [],
+              education: []
+            },
+            modifications: modifications.map(m => ({
+              section: String(m.section),
+              type: String(m.type),
+              description: String(m.description)
+            })),
+            docxUrl,
+            originalScore: originalScore || 70,
+            estimatedScore
+          });
+          
+          await tailoredResume.save();
+          console.log('✅ [Tailored] Saved Gemini-tailored resume:', tailoredResume._id);
+          
+          return res.json({
+            message: "Resume tailored successfully with Gemini AI",
+            tailoredResume,
+            scoreImprovement: estimatedScore - (originalScore || 70),
+            method: "gemini-service",
+            formattingPreserved: true
+          });
+          
+        } catch (geminiError) {
+          console.error('❌ [Tailored] Gemini service error:', geminiError.message);
+          console.log('⚠️ [Tailored] Falling back to Python service');
+          // Fall through to Python service
+        }
+      }
+      
+      // Fallback: Try Python service
+      console.log('📄 [Tailored] Checking Python service...');
       
       // Check if Python service is available
       const pythonAvailable = await checkPythonServiceHealth();
