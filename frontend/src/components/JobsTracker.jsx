@@ -129,14 +129,6 @@ export default function JobsTracker() {
     <div className="tracker-page">
 
         {/* Page Header */}
-        <div className="tracker-page-header">
-          <div className="tracker-page-header-inner">
-            <div>
-              <h1 className="tracker-page-title">Jobs Tracker</h1>
-              <p className="tracker-page-sub">Track and manage all your job applications</p>
-            </div>
-          </div>
-        </div>
 
         <div className="tracker-body">
 

@@ -117,26 +117,6 @@ export default function ResumeLibrary() {
 
   return (
     <div className="library-page">
-        <div className="library-page-header">
-          <div className="library-page-header-inner">
-            <div>
-              <h1 className="library-page-title">Resume Library</h1>
-              <p className="library-page-sub">Manage your uploaded resumes and track applications</p>
-            </div>
-            <div className="header-stat-row">
-              <div className="header-stat">
-                <div className="header-stat-num">{resumes.length}</div>
-                <div className="header-stat-label">Resumes</div>
-              </div>
-              <div style={{ width: 1, background: "var(--border)", height: 36 }} />
-              <div className="header-stat">
-                <div className="header-stat-num">{totalApplied}</div>
-                <div className="header-stat-label">Applications</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
         <div className="library-body">
           <div className="resume-grid">
             {resumes.map((resume) => {

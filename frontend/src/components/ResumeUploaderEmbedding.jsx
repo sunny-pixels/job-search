@@ -141,17 +141,19 @@ export default function ResumeUploaderEmbedding() {
   };
 
   const prefetchPage = useCallback(async (page) => {
+    if (!resumeId) return; // Don't prefetch without resumeId
     if (pageCache.current[page] || prefetchingPages.current.has(page)) return;
     prefetchingPages.current.add(page);
     try {
-      const res = await fetch(`${API_URL}/api/embedding-matcher/jobs?page=${page}&limit=12`);
+      const res = await fetch(`${API_URL}/api/embedding-matcher/jobs?resumeId=${resumeId}&page=${page}&limit=12`);
       if (!res.ok) return;
       const data = await res.json();
       pageCache.current[page] = { jobs: data.jobs || [], pagination: data.pagination, scoreDistribution: data.score_distribution };
-    } catch {} finally { prefetchingPages.current.delete(page); }
-  }, []);
+    } catch { } finally { prefetchingPages.current.delete(page); }
+  }, [resumeId]);
 
   const showPage = useCallback(async (page, showLoader = true) => {
+    if (!resumeId) return; // Don't fetch without resumeId
     setCurrentPage(page);
     if (pageCache.current[page]) {
       const cached = pageCache.current[page];
@@ -164,13 +166,13 @@ export default function ResumeUploaderEmbedding() {
     }
     if (showLoader) setLoadingJobs(true);
     try {
-      const res = await fetch(`${API_URL}/api/embedding-matcher/jobs?page=${page}&limit=12`);
+      const res = await fetch(`${API_URL}/api/embedding-matcher/jobs?resumeId=${resumeId}&page=${page}&limit=12`);
       if (!res.ok) throw new Error(`Status: ${res.status}`);
       const data = await res.json();
-      
-      const entry = { 
-        jobs: data.jobs || [], 
-        pagination: data.pagination, 
+
+      const entry = {
+        jobs: data.jobs || [],
+        pagination: data.pagination,
         scoreDistribution: data.score_distribution
       };
       pageCache.current[page] = entry;
@@ -182,14 +184,14 @@ export default function ResumeUploaderEmbedding() {
       setTimeout(() => prefetchPage(page - 1), 600);
     } catch (err) { console.error(err); }
     finally { if (showLoader) setLoadingJobs(false); }
-  }, [prefetchPage]);
+  }, [resumeId, prefetchPage]);
 
   const fetchMatchingJobs = useCallback(async (page = 1) => {
     pageCache.current = {};
     prefetchingPages.current.clear();
     setLoadingJobs(true);
     setJobProgress({ message: 'Starting embedding-based matching...', progress: 10 });
-    
+
     // Poll progress endpoint
     const progressInterval = setInterval(async () => {
       try {
@@ -198,9 +200,9 @@ export default function ResumeUploaderEmbedding() {
           const data = await res.json();
           setJobProgress({ message: data.message || '', progress: data.progress || 0 });
         }
-      } catch {}
+      } catch { }
     }, 1000);
-    
+
     try {
       await showPage(page, false);
       if (resumeId) checkAppliedStatus();
@@ -276,45 +278,6 @@ export default function ResumeUploaderEmbedding() {
 
   return (
     <div className="uploader-page">
-      {/* HERO */}
-      <div className="hero-section">
-        <div className="hero-inner">
-          <div className="hero-eyebrow">
-            <span className="hero-eyebrow-dot" />
-            ⚡ Fast Embedding-Based Matching
-          </div>
-          <h1 className="hero-title">Find jobs with <em>precision and speed</em></h1>
-          <p className="hero-desc">Upload your resume and get instant semantic matches using advanced embeddings — 3x faster than AI analysis!</p>
-          <div className="hero-stats">
-            <div className="hero-stat">
-              <div className="hero-stat-num">&lt;15s</div>
-              <div className="hero-stat-label">Match Time</div>
-            </div>
-            <div className="hero-stat-divider" />
-            <div className="hero-stat">
-              <div className="hero-stat-num">Semantic</div>
-              <div className="hero-stat-label">Embeddings</div>
-            </div>
-            <div className="hero-stat-divider" />
-            <div className="hero-stat">
-              <div className="hero-stat-num">250+</div>
-              <div className="hero-stat-label">Jobs Analyzed</div>
-            </div>
-            {rateLimit && rateLimit.remaining !== null && rateLimit.limit !== null && (
-              <>
-                <div className="hero-stat-divider" />
-                <div className="hero-stat">
-                  <div className="hero-stat-num" style={{ color: rateLimit.remaining < 20 ? '#f44336' : rateLimit.remaining < 50 ? '#ff9800' : '#4caf50' }}>
-                    {rateLimit.remaining}
-                  </div>
-                  <div className="hero-stat-label">API Requests Left</div>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
       {/* MAIN CONTENT */}
       <div className="uploader-body">
         <div className="uploader-body-inner">
@@ -322,23 +285,23 @@ export default function ResumeUploaderEmbedding() {
             <div className="full-width-upload">
               <div className="upload-card">
                 <div className="upload-card-header">
-                  <div className="upload-card-title">Upload Your Resume (Fast Mode)</div>
-                  <div className="upload-card-subtitle">PDF format • Embedding-based semantic matching</div>
+                  <div className="upload-card-title">Upload Your Resume</div>
+                  <div className="upload-card-subtitle">Supports PDF, DOC, DOCX — semantic AI matching</div>
                 </div>
                 <div className={`upload-zone ${file ? "has-file" : ""}`}>
                   <input type="file" accept=".pdf,.doc,.docx" onChange={handleFileChange} className="file-input" />
                   <div className="upload-icon-wrap">
                     {file ? (
                       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="20,6 9,17 4,12"/>
+                        <polyline points="20,6 9,17 4,12" />
                       </svg>
                     ) : (
                       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                        <polyline points="14,2 14,8 20,8"/>
-                        <line x1="16" y1="13" x2="8" y2="13"/>
-                        <line x1="16" y1="17" x2="8" y2="17"/>
-                        <polyline points="10,9 9,9 8,9"/>
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14,2 14,8 20,8" />
+                        <line x1="16" y1="13" x2="8" y2="13" />
+                        <line x1="16" y1="17" x2="8" y2="17" />
+                        <polyline points="10,9 9,9 8,9" />
                       </svg>
                     )}
                   </div>
@@ -357,19 +320,26 @@ export default function ResumeUploaderEmbedding() {
                   )}
                 </div>
                 <button className="btn-analyse" onClick={handleUpload} disabled={loading}>
-                  {loading ? (<><div className="spinner" /><span>Analyzing resume…</span></>) : (<span>⚡ Fast Match with Embeddings →</span>)}
+                  {loading ? (<><div className="spinner" /><span>Analyzing resume…</span></>) : (
+                    <>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                      </svg>
+                      <span>Analyze & Find Matching Jobs</span>
+                    </>
+                  )}
                 </button>
                 {message.text && (
                   <div className={`msg-box ${message.type}`}>
                     {message.type === "error" ? (
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                        <line x1="12" y1="9" x2="12" y2="13"/>
-                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                        <line x1="12" y1="9" x2="12" y2="13" />
+                        <line x1="12" y1="17" x2="12.01" y2="17" />
                       </svg>
                     ) : (
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="20,6 9,17 4,12"/>
+                        <polyline points="20,6 9,17 4,12" />
                       </svg>
                     )}{message.text}
                   </div>
@@ -382,47 +352,55 @@ export default function ResumeUploaderEmbedding() {
               <div>
                 <div className="upload-card">
                   <div className="upload-card-header">
-                    <div className="upload-card-title">Upload Resume (Fast Mode)</div>
+                    <div className="upload-card-title">Upload New Resume</div>
+                    <div className="upload-card-subtitle">Re-analyze with a different resume</div>
                   </div>
                   <div className={`upload-zone ${file ? "has-file" : ""}`}>
                     <input type="file" accept=".pdf,.doc,.docx" onChange={handleFileChange} className="file-input" />
                     <div className="upload-icon-wrap">
                       {file ? (
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="20,6 9,17 4,12"/>
+                          <polyline points="20,6 9,17 4,12" />
                         </svg>
                       ) : (
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                          <polyline points="14,2 14,8 20,8"/>
-                          <line x1="16" y1="13" x2="8" y2="13"/>
-                          <line x1="16" y1="17" x2="8" y2="17"/>
-                          <polyline points="10,9 9,9 8,9"/>
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                          <polyline points="14,2 14,8 20,8" />
+                          <line x1="16" y1="13" x2="8" y2="13" />
+                          <line x1="16" y1="17" x2="8" y2="17" />
+                          <polyline points="10,9 9,9 8,9" />
                         </svg>
                       )}
                     </div>
                     <div className="upload-title">{file ? "File ready" : "Upload a new resume"}</div>
                     {file && <div className="upload-filename">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66L9.64 16.2a2 2 0 0 1-2.83-2.83l8.49-8.49"/>
+                        <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66L9.64 16.2a2 2 0 0 1-2.83-2.83l8.49-8.49" />
                       </svg>
                       {file.name}
                     </div>}
                   </div>
                   <button className="btn-analyse" onClick={handleUpload} disabled={loading}>
-                    {loading ? (<><div className="spinner" /><span>Analyzing…</span></>) : (<span>⚡ Fast Match with Embeddings →</span>)}
+                    {loading ? (<><div className="spinner" /><span>Analyzing…</span></>) : (
+                      <>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        </svg>
+                        <span>Re-Analyze Resume</span>
+                      </>
+                    )}
                   </button>
                   {message.text && (
                     <div className={`msg-box ${message.type}`}>
                       {message.type === "error" ? (
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                          <line x1="12" y1="9" x2="12" y2="13"/>
-                          <line x1="12" y1="17" x2="12.01" y2="17"/>
+                          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                          <line x1="12" y1="9" x2="12" y2="13" />
+                          <line x1="12" y1="17" x2="12.01" y2="17" />
                         </svg>
                       ) : (
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="20,6 9,17 4,12"/>
+                          <polyline points="20,6 9,17 4,12" />
                         </svg>
                       )}{message.text}
                     </div>
@@ -433,8 +411,13 @@ export default function ResumeUploaderEmbedding() {
                 <div style={{ marginTop: 20 }}>
                   <div className="analysis-panel">
                     <div className="panel-header">
-                      <div className="panel-header-icon">⚡</div>
-                      <div className="panel-title">Resume Insights (Fast Mode)</div>
+                      <div className="panel-header-icon">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
+                          <polyline points="13,2 13,9 20,9"/>
+                        </svg>
+                      </div>
+                      <div className="panel-title">Resume Analysis</div>
                     </div>
                     <div className="panel-body">
                       {(file?.name || savedFileName || analysis?.fileName) && (
@@ -491,27 +474,20 @@ export default function ResumeUploaderEmbedding() {
                 {!loadingJobs && jobs.length > 0 && (
                   <>
                     <div className="jobs-section-header">
-                      <div>
-                        <div className="jobs-section-title">
-                          ⚡ Embedding-Matched Roles <span>({pagination?.total_jobs || jobs.length} found)</span>
+                      <div className="jobs-section-title">
+                        Matched Roles <span>({pagination?.total_jobs || jobs.length} found)</span>
+                      </div>
+                      
+                      {scoreDistribution && (
+                        <div className="dist-strip-inline">
+                          <div className="dist-item"><div className="dist-num green">{scoreDistribution.excellent}</div><div className="dist-label">90–100%</div></div>
+                          <div className="dist-item"><div className="dist-num blue">{scoreDistribution.great}</div><div className="dist-label">80–89%</div></div>
+                          <div className="dist-item"><div className="dist-num yellow">{scoreDistribution.good}</div><div className="dist-label">70–79%</div></div>
+                          <div className="dist-item"><div className="dist-num orange">{scoreDistribution.fair}</div><div className="dist-label">60–69%</div></div>
+                          <div className="dist-item"><div className="dist-num gray">{scoreDistribution.low}</div><div className="dist-label">&lt;60%</div></div>
                         </div>
-                        {pagination && (
-                          <div className="jobs-meta-line">
-                            Page {pagination.current_page} of {pagination.total_pages} · Sorted by semantic similarity
-                          </div>
-                        )}
-                      </div>
+                      )}
                     </div>
-
-                    {scoreDistribution && (
-                      <div className="dist-strip">
-                        <div className="dist-item"><div className="dist-num green">{scoreDistribution.excellent}</div><div className="dist-label">90–100%</div></div>
-                        <div className="dist-item"><div className="dist-num blue">{scoreDistribution.great}</div><div className="dist-label">80–89%</div></div>
-                        <div className="dist-item"><div className="dist-num yellow">{scoreDistribution.good}</div><div className="dist-label">70–79%</div></div>
-                        <div className="dist-item"><div className="dist-num orange">{scoreDistribution.fair}</div><div className="dist-label">60–69%</div></div>
-                        <div className="dist-item"><div className="dist-num gray">{scoreDistribution.low}</div><div className="dist-label">&lt;60%</div></div>
-                      </div>
-                    )}
 
                     <div className="jobs-grid">
                       {jobs.map((job, idx) => {
@@ -536,8 +512,8 @@ export default function ResumeUploaderEmbedding() {
 
                             <div className="job-location">
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-                                <circle cx="12" cy="10" r="3"/>
+                                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                                <circle cx="12" cy="10" r="3" />
                               </svg>
                               <span>{job.job_location || "Location N/A"}</span>
                             </div>
@@ -555,14 +531,14 @@ export default function ResumeUploaderEmbedding() {
                                 Apply Now →
                               </a>
                               {job.embedding_match_score >= 50 && (
-                                <button 
-                                  className="btn-tailor" 
+                                <button
+                                  className="btn-tailor"
                                   onClick={() => handleTailorClick(job)}
                                   title="Generate AI-tailored resume for this job"
                                 >
                                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                                   </svg>
                                   <span>AI Tailor Resume</span>
                                 </button>
@@ -570,7 +546,7 @@ export default function ResumeUploaderEmbedding() {
                               {isApplied ? (
                                 <button className="btn-mark applied-state" onClick={() => unmarkAsApplied(job)} title="Click to undo">
                                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                    <polyline points="20,6 9,17 4,12"/>
+                                    <polyline points="20,6 9,17 4,12" />
                                   </svg>
                                   <span>Applied — Undo</span>
                                 </button>
@@ -599,8 +575,8 @@ export default function ResumeUploaderEmbedding() {
                   <div className="empty-card">
                     <div className="empty-icon">
                       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.35 }}>
-                        <circle cx="11" cy="11" r="8"/>
-                        <path d="m21 21-4.35-4.35"/>
+                        <circle cx="11" cy="11" r="8" />
+                        <path d="m21 21-4.35-4.35" />
                       </svg>
                     </div>
                     <div className="empty-text">No matching jobs found right now. Try uploading a different resume or check back later.</div>
