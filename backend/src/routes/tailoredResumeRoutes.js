@@ -5,6 +5,8 @@
 
 const express = require("express");
 const {
+  analyzeKeywords,
+  getPreviewHtml,
   createTailoredResume,
   getTailoredResume,
   getTailoredResumesByOriginal,
@@ -13,6 +15,12 @@ const {
 } = require("../controllers/tailoredResumeController");
 
 const router = express.Router();
+
+// Analyze missing keywords
+router.post("/analyze-keywords", analyzeKeywords);
+
+// Get HTML preview
+router.post("/preview", getPreviewHtml);
 
 // Create tailored resume for a job
 router.post("/create", createTailoredResume);

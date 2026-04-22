@@ -9,7 +9,8 @@ const {
   uploadResumeEmbedding,
   getMatchingJobsEmbedding,
   getJobProgressEmbedding,
-  getAllResumes
+  getAllResumes,
+  downloadResume
 } = require("../controllers/embeddingResumeController");
 const { getRateLimitInfo } = require("../services/rateLimitTracker");
 
@@ -36,6 +37,7 @@ router.post("/upload", upload.single("resume"), uploadResumeEmbedding);
 router.get("/jobs", getMatchingJobsEmbedding);
 router.get("/jobs/progress", getJobProgressEmbedding);
 router.get("/all", getAllResumes);
+router.get("/download/:id", downloadResume);
 router.get("/rate-limit", (req, res) => {
   res.json(getRateLimitInfo());
 });

@@ -54,7 +54,7 @@ const tailorDocxWithPython = async (docxPath, jobData) => {
       method: 'POST',
       body: form,
       headers: form.getHeaders(),
-      timeout: 60000 // 60 second timeout
+      timeout: 180000 // 3 minute timeout for slow AI responses
     });
     
     if (!response.ok) {

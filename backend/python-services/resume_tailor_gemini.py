@@ -27,8 +27,9 @@ app = Flask(__name__)
 CORS(app)
 
 # Gemini model
-# GEMINI_MODEL = "gemma-4-31b-it"
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemma-4-31b-it"
+# GEMINI_MODEL = "gemini-2.5-flash"
+# GEMINI_MODEL = "gemma-4-26b-a4b-it"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 1. PARSER

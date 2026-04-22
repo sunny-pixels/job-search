@@ -17,6 +17,203 @@ const path = require("path");
 const fs = require("fs").promises;
 
 /**
+ * Analyze and extract missing keywords from job description
+ * POST /api/tailored-resume/analyze-keywords
+ */
+const analyzeKeywords = async (req, res) => {
+  try {
+    const { resumeId, jobData } = req.body;
+
+    if (!resumeId || !jobData) {
+      return res.status(400).json({ 
+        message: "Missing required fields: resumeId and jobData" 
+      });
+    }
+
+    console.log('🔍 [Analyze] Extracting missing keywords for:', jobData.job_title);
+
+    // Get original resume
+    const resume = await Resume.findById(resumeId);
+    if (!resume) {
+      return res.status(404).json({ message: "Resume not found" });
+    }
+
+    // Extract skills from resume
+    const resumeSkills = new Set(
+      (resume.extractedData?.skills || []).map(s => s.toLowerCase())
+    );
+
+    // Extract keywords from job description
+    const jobText = `${jobData.job_title} ${jobData.job_description || ''} ${JSON.stringify(jobData.job_highlights || {})}`;
+    
+    // Common tech keywords and categories
+    const techKeywords = {
+      'Programming Languages': ['JavaScript', 'Python', 'Java', 'C++', 'C#', 'TypeScript', 'Go', 'Rust', 'Swift', 'Kotlin', 'PHP', 'Ruby', 'Scala'],
+      'Frontend': ['React', 'Vue', 'Angular', 'Next.js', 'Svelte', 'HTML', 'CSS', 'Tailwind', 'Bootstrap', 'jQuery'],
+      'Backend': ['Node.js', 'Express', 'Django', 'Flask', 'Spring', 'ASP.NET', '.NET', 'FastAPI', 'Laravel', 'Rails'],
+      'Databases': ['MongoDB', 'PostgreSQL', 'MySQL', 'Redis', 'Elasticsearch', 'DynamoDB', 'Cassandra', 'Oracle', 'SQL Server'],
+      'Cloud & DevOps': ['AWS', 'Azure', 'GCP', 'Docker', 'Kubernetes', 'Jenkins', 'CI/CD', 'Terraform', 'Ansible'],
+      'Data & AI': ['TensorFlow', 'PyTorch', 'Pandas', 'NumPy', 'Scikit-learn', 'Spark', 'Hadoop', 'Kafka', 'Machine Learning', 'Deep Learning'],
+      'Tools': ['Git', 'GitHub', 'GitLab', 'Jira', 'Confluence', 'VS Code', 'IntelliJ', 'Postman', 'Figma']
+    };
+
+    const missingKeywords = [];
+
+    // Check each category
+    for (const [category, keywords] of Object.entries(techKeywords)) {
+      for (const keyword of keywords) {
+        const keywordLower = keyword.toLowerCase();
+        // Check if keyword is in job but not in resume
+        if (jobText.toLowerCase().includes(keywordLower) && !resumeSkills.has(keywordLower)) {
+          missingKeywords.push({
+            keyword,
+            category,
+            inJob: true,
+            inResume: false
+          });
+        }
+      }
+    }
+
+    // Convert original DOCX to HTML if available
+    let originalHtml = null;
+    console.log('📋 [Analyze] Resume info - Type:', resume.fileType, 'FileURL:', resume.fileUrl);
+    
+    if (resume.fileType === 'docx' && resume.fileUrl) {
+      try {
+        const mammoth = require('mammoth');
+        // fileUrl is like "/uploads/filename.docx", need to convert to absolute path
+        const fullPath = path.join(__dirname, '../../', resume.fileUrl);
+        console.log('📄 [Analyze] Full path for conversion:', fullPath);
+        
+        // Check if file exists
+        try {
+          await fs.access(fullPath);
+          console.log('✅ [Analyze] File exists at path');
+        } catch (accessErr) {
+          console.error('❌ [Analyze] File does NOT exist at:', fullPath);
+          throw new Error(`File not found: ${fullPath}`);
+        }
+        
+        const result = await mammoth.convertToHtml({ 
+          path: fullPath,
+          styleMap: [
+            "p[style-name='Heading 1'] => h1:fresh",
+            "p[style-name='Heading 2'] => h2:fresh",
+            "p[style-name='Heading 3'] => h3:fresh",
+            "b => strong",
+            "i => em"
+          ]
+        });
+        originalHtml = result.value;
+        console.log('✅ [Analyze] Converted DOCX to HTML:', originalHtml.length, 'chars');
+        console.log('📝 [Analyze] First 200 chars:', originalHtml.substring(0, 200));
+        
+        if (result.messages && result.messages.length > 0) {
+          console.log('⚠️ [Analyze] Conversion warnings:', result.messages);
+        }
+      } catch (err) {
+        console.error('❌ [Analyze] DOCX conversion error:', err);
+        // Fallback to text content
+        originalHtml = `<div class="resume-fallback">
+          <h1>${resume.extractedData?.name || 'Resume'}</h1>
+          <p><strong>Email:</strong> ${resume.extractedData?.email || 'N/A'}</p>
+          <p><strong>Phone:</strong> ${resume.extractedData?.phone || 'N/A'}</p>
+          <p><strong>Experience:</strong> ${resume.extractedData?.experience_years || 0} years</p>
+          <h2>Skills</h2>
+          <p>${resume.extractedData?.skills?.join(', ') || 'No skills found'}</p>
+          <p class="error-note">Note: Could not load full DOCX preview. Error: ${err.message}</p>
+        </div>`;
+      }
+    } else {
+      console.log('⚠️ [Analyze] Not a DOCX file or no fileUrl');
+      // For non-DOCX files, create HTML from extracted data
+      originalHtml = `<div class="resume-fallback">
+        <h1>${resume.extractedData?.name || 'Resume'}</h1>
+        <p><strong>Email:</strong> ${resume.extractedData?.email || 'N/A'}</p>
+        <p><strong>Phone:</strong> ${resume.extractedData?.phone || 'N/A'}</p>
+        <p><strong>Experience:</strong> ${resume.extractedData?.experience_years || 0} years</p>
+        <h2>Skills</h2>
+        <p>${resume.extractedData?.skills?.join(', ') || 'No skills found'}</p>
+      </div>`;
+    }
+
+    console.log(`✅ [Analyze] Found ${missingKeywords.length} missing keywords`);
+
+    res.json({
+      success: true,
+      missingKeywords,
+      originalHtml: originalHtml,
+      resumeId: resume._id
+    });
+
+  } catch (error) {
+    console.error('❌ [Analyze] Error:', error);
+    res.status(500).json({ 
+      message: "Failed to analyze keywords",
+      error: error.message 
+    });
+  }
+};
+
+/**
+ * Get HTML preview of tailored resume
+ * POST /api/tailored-resume/preview
+ */
+const getPreviewHtml = async (req, res) => {
+  try {
+    const { tailoredResumeId } = req.body;
+
+    if (!tailoredResumeId) {
+      return res.status(400).json({ message: "Missing tailoredResumeId" });
+    }
+
+    const tailoredResume = await TailoredResume.findById(tailoredResumeId);
+    if (!tailoredResume) {
+      return res.status(404).json({ message: "Tailored resume not found" });
+    }
+
+    // Convert tailored DOCX to HTML
+    let tailoredHtml = null;
+    if (tailoredResume.docxUrl) {
+      try {
+        const mammoth = require('mammoth');
+        const fullPath = path.join(__dirname, '../../', tailoredResume.docxUrl);
+        const result = await mammoth.convertToHtml({ 
+          path: fullPath,
+          styleMap: [
+            "p[style-name='Heading 1'] => h1:fresh",
+            "p[style-name='Heading 2'] => h2:fresh",
+            "p[style-name='Heading 3'] => h3:fresh",
+            "b => strong",
+            "i => em"
+          ]
+        });
+        tailoredHtml = result.value;
+        console.log('✅ [Preview] Converted tailored DOCX to HTML:', tailoredHtml.length, 'chars');
+      } catch (err) {
+        console.warn('⚠️ [Preview] Could not convert tailored DOCX to HTML:', err.message);
+        tailoredHtml = '<p>Preview not available - DOCX conversion failed</p>';
+      }
+    } else {
+      tailoredHtml = '<p>Preview not available - No DOCX file found</p>';
+    }
+
+    res.json({
+      success: true,
+      tailoredHtml: tailoredHtml
+    });
+
+  } catch (error) {
+    console.error('❌ [Preview] Error:', error);
+    res.status(500).json({ 
+      message: "Failed to generate preview",
+      error: error.message 
+    });
+  }
+};
+
+/**
  * Create a tailored resume for a specific job
  * POST /api/tailored-resume/create
  */
@@ -440,6 +637,8 @@ const deleteTailoredResume = async (req, res) => {
 };
 
 module.exports = {
+  analyzeKeywords,
+  getPreviewHtml,
   createTailoredResume,
   getTailoredResume,
   getTailoredResumesByOriginal,

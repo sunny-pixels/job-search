@@ -11,6 +11,8 @@ const { checkServiceHealth } = require("../services/embeddingClient");
 const { saveFile } = require("../services/fileStorageService");
 const Resume = require("../models/Resume");
 const crypto = require("crypto");
+const path = require("path");
+const fs = require("fs").promises;
 
 // In-memory store for embedding-based system
 let lastAnalyzedResumeEmbedding = null;
@@ -223,7 +225,7 @@ const getMatchingJobsEmbedding = async (req, res) => {
     const searchData = buildSearchQueries(lastAnalyzedResumeEmbedding.analysis);
     
     const allJobs = await searchMultipleQueries(searchData.queries, {
-      num_pages: 3, // 1 page = 10 jobs per query - reduced to avoid rate limits
+      num_pages: 1, // 1 page = 10 jobs per query - reduced to avoid rate limits
       date_posted: 'month',
       country: 'us',
       job_requirements: searchData.requirements // Filter by experience level
@@ -364,9 +366,52 @@ const getAllResumes = async (req, res) => {
   }
 };
 
+/**
+ * Download original resume file
+ * GET /api/embedding-matcher/download/:id
+ */
+const downloadResume = async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log('📥 [Download] Request for original resume:', id);
+
+    const resume = await Resume.findById(id);
+    if (!resume) {
+      return res.status(404).json({ message: "Resume not found" });
+    }
+
+    const filePath = path.join(__dirname, '../../', resume.fileUrl);
+    console.log('📥 [Download] File path:', filePath);
+
+    // Check if file exists
+    await fs.access(filePath);
+
+    // Set headers for download
+    res.setHeader('Content-Type', resume.fileType === 'docx' 
+      ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      : 'application/pdf'
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${resume.fileName}"`);
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
+
+    // Send file
+    res.sendFile(filePath);
+    console.log('✅ [Download] File sent successfully');
+
+  } catch (error) {
+    console.error('❌ [Download] Error:', error);
+    res.status(500).json({ 
+      message: "Error downloading resume", 
+      error: error.message 
+    });
+  }
+};
+
 module.exports = {
   uploadResumeEmbedding,
   getMatchingJobsEmbedding,
   getJobProgressEmbedding,
-  getAllResumes
+  getAllResumes,
+  downloadResume
 };
