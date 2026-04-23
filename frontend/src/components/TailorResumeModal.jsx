@@ -511,7 +511,7 @@ const styles = {
     display: "flex", alignItems: "center", justifyContent: "flex-end", zIndex: 9999,
   },
   modal: {
-    background: "#fff", borderRadius: "18px 0 0 18px", width: "80%",
+    background: "#fff", borderRadius: "18px 0 0 18px", width: "90%",
     height: "100vh", display: "flex", flexDirection: "column",
     position: "relative", overflow: "hidden",
     boxShadow: "-8px 0 40px rgba(0,0,0,.25)",

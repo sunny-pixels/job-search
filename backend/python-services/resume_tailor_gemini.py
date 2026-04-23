@@ -182,8 +182,8 @@ def tailor_with_gemini(resume_json: str, job_description: str) -> list[dict]:
 # ──────────────────────────────────────────────────────────────────────────────
 # 3. PATCH APPLICATION
 # ──────────────────────────────────────────────────────────────────────────────
-def _replace_para_text(para_el, new_text: str):
-    """Replace text while preserving ALL XML formatting"""
+def _replace_para_text(para_el, new_text: str, highlight_words=None):
+    """Replace text while preserving ALL XML formatting and optionally highlighting words"""
     W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
     
     existing_runs = para_el.findall(f"{{{W}}}r")
@@ -198,22 +198,51 @@ def _replace_para_text(para_el, new_text: str):
     for r in existing_runs:
         para_el.remove(r)
     
-    # Create new run with preserved formatting
-    new_r = OxmlElement("w:r")
-    if template_rpr is not None:
-        new_r.append(template_rpr)
+    # If no highlighting needed, just add text normally
+    if not highlight_words:
+        new_r = OxmlElement("w:r")
+        if template_rpr is not None:
+            new_r.append(template_rpr)
+        
+        t_el = OxmlElement("w:t")
+        t_el.text = new_text
+        if new_text and (new_text[0] == " " or new_text[-1] == " "):
+            t_el.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
+        
+        new_r.append(t_el)
+        para_el.append(new_r)
+        return
     
-    t_el = OxmlElement("w:t")
-    t_el.text = new_text
-    if new_text and (new_text[0] == " " or new_text[-1] == " "):
+    # Split text into words and highlight specified ones
+    words = new_text.split()
+    for i, word in enumerate(words):
+        # Check if this word should be highlighted (case-insensitive)
+        should_highlight = any(hw.lower() in word.lower() for hw in highlight_words)
+        
+        new_r = OxmlElement("w:r")
+        
+        # Create rPr with or without highlight
+        if should_highlight:
+            rpr = copy.deepcopy(template_rpr) if template_rpr is not None else OxmlElement("w:rPr")
+            highlight = OxmlElement("w:highlight")
+            highlight.set(f"{{{W}}}val", "yellow")
+            rpr.append(highlight)
+            new_r.append(rpr)
+        else:
+            if template_rpr is not None:
+                new_r.append(copy.deepcopy(template_rpr))
+        
+        # Add the word with space
+        t_el = OxmlElement("w:t")
+        t_el.text = word + (" " if i < len(words) - 1 else "")
         t_el.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
-    
-    new_r.append(t_el)
-    para_el.append(new_r)
+        
+        new_r.append(t_el)
+        para_el.append(new_r)
 
 
 def apply_patches(parsed: dict, patches: list[dict]) -> int:
-    """Apply Gemini's suggested patches to the document"""
+    """Apply Gemini's suggested patches to the document with yellow highlighting for changes"""
     index_map = {s["index"]: s for s in parsed["sections"]}
     applied = 0
     
@@ -231,11 +260,20 @@ def apply_patches(parsed: dict, patches: list[dict]) -> int:
         if old_text.strip() == new_text.strip():
             continue
         
-        _replace_para_text(section["_xml_ref"], new_text)
+        # Find what was added/modified (word-level diff)
+        old_words = set(old_text.lower().replace(',', '').split())
+        new_words_list = new_text.replace(',', '').split()
+        # Find words that are new (not in original) and longer than 1 char
+        added_words = [w for w in new_words_list if w.lower() not in old_words and len(w) > 1]
+        
+        # Replace text and highlight added words in yellow
+        _replace_para_text(section["_xml_ref"], new_text, added_words if added_words else None)
         
         print(f"\n  ✏️  Block #{idx}  |  {reason}")
         print(f"  OLD: {old_text[:90]}")
         print(f"  NEW: {new_text[:90]}")
+        if added_words:
+            print(f"  💛 Highlighting: {', '.join(added_words[:10])}")
         
         applied += 1
     
