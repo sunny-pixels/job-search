@@ -217,16 +217,58 @@ const extractJobExperience = (job) => {
   let maxYears = 0;
   let level = "Any";
   let confidence = "low";
+  let explicitYearsFound = false; // Track if we found explicit years
   
-  // Pattern 1: Range with "years" (e.g., "2-4 years", "3 to 5 years")
-  const rangePattern = /(\d+)\s*(?:-|to)\s*(\d+)\s*(?:\+)?\s*years?/i;
-  const rangeMatch = combinedText.match(rangePattern);
+  // Pattern 1: Range with "years" (e.g., "2-4 years", "3 to 5 years", "6 10 years")
+  // CRITICAL: Use global flag and find ALL matches, then pick the best one
+  // This prevents single number patterns from matching before range patterns
+  
+  let rangeMatch = null;
+  let bestMatch = null;
+  
+  // Try hyphen or "to" pattern (most explicit)
+  const hyphenPattern = /(\d+)\s*(?:-|to)\s*(\d+)\s*(?:\+)?\s*years?/gi;
+  const hyphenMatches = [...combinedText.matchAll(hyphenPattern)];
+  
+  if (hyphenMatches.length > 0) {
+    // Use the first match (usually in qualifications section)
+    rangeMatch = hyphenMatches[0];
+    console.log(`   🔍 [DEBUG] Hyphen pattern matched: "${rangeMatch[0]}" (found ${hyphenMatches.length} matches)`);
+  }
+  
+  // If no hyphen match, try space-separated pattern
+  if (!rangeMatch) {
+    const spacePattern = /(\d+)\s+(\d+)\s+years?/gi;
+    const spaceMatches = [...combinedText.matchAll(spacePattern)];
+    
+    if (spaceMatches.length > 0) {
+      rangeMatch = spaceMatches[0];
+      console.log(`   🔍 [DEBUG] Space pattern matched: "${rangeMatch[0]}" (found ${spaceMatches.length} matches)`);
+    }
+  }
   
   if (rangeMatch) {
-    minYears = parseInt(rangeMatch[1]);
-    maxYears = parseInt(rangeMatch[2]);
-    confidence = "high";
-    console.log(`   📊 Found range: ${minYears}-${maxYears} years`);
+    const num1 = parseInt(rangeMatch[1]);
+    const num2 = parseInt(rangeMatch[2]);
+    
+    console.log(`   🔍 [DEBUG] Extracted numbers: ${num1}, ${num2}`);
+    
+    // Validate it's actually a range (not just two separate numbers)
+    // Check if the numbers are close together (within 15 years) and num2 > num1
+    if (num2 > num1 && (num2 - num1) <= 15) {
+      minYears = num1;
+      maxYears = num2;
+      confidence = "high";
+      explicitYearsFound = true;
+      console.log(`   📊 Found explicit range: ${minYears}-${maxYears} years`);
+    } else {
+      // If numbers don't make sense as a range, treat as single number
+      const years = num2; // Use the second number (usually the max)
+      minYears = Math.max(0, years - 1);
+      maxYears = years + 1;
+      confidence = "medium";
+      console.log(`   📊 Found ambiguous range "${rangeMatch[0]}", using ${years} years → ${minYears}-${maxYears} years`);
+    }
   }
   
   // Pattern 2: Single number with "years" (e.g., "3 years", "5+ years")
@@ -238,17 +280,12 @@ const extractJobExperience = (job) => {
     if (writtenMatch) {
       const years = parseInt(writtenMatch[1]);
       
-      if (combinedText.includes('at least') || combinedText.includes('minimum')) {
-        minYears = years;
-        maxYears = years + 2;
-        confidence = "high";
-        console.log(`   📊 Found written number: "${writtenMatch[0]}" → ${minYears}-${maxYears} years`);
-      } else {
-        minYears = Math.max(0, years - 1);
-        maxYears = years + 1;
-        confidence = "medium";
-        console.log(`   📊 Found written number: "${writtenMatch[0]}" → ${minYears}-${maxYears} years`);
-      }
+      // ALL written patterns mean "X or more" (no upper limit)
+      minYears = years;
+      maxYears = 99; // No upper limit
+      confidence = "high";
+      explicitYearsFound = true;
+      console.log(`   📊 Found explicit written number: "${writtenMatch[0]}" → ${minYears}+ years (no upper limit)`);
     } else {
       // Try standard numeric pattern
       const singlePattern = /(\d+)\+?\s*years?\s*(?:of\s*)?(?:experience|exp)?/i;
@@ -257,67 +294,65 @@ const extractJobExperience = (job) => {
       if (singleMatch) {
         const years = parseInt(singleMatch[1]);
         
-        // If it says "3+ years", treat as 3-5 range
-        if (combinedText.includes(years + '+')) {
-          minYears = years;
-          maxYears = years + 2;
-          confidence = "medium";
-          console.log(`   📊 Found ${years}+ years → ${minYears}-${maxYears} years`);
-        } else {
-          // Exact years mentioned, create small range
-          minYears = Math.max(0, years - 1);
-          maxYears = years + 1;
-          confidence = "medium";
-          console.log(`   📊 Found ${years} years → ${minYears}-${maxYears} years`);
-        }
+        // ALL single number patterns mean "X or more" (no upper limit)
+        // "7 years" → 7+ (no upper limit)
+        // "5+ years" → 5+ (no upper limit)
+        minYears = years;
+        maxYears = 99; // No upper limit
+        confidence = "medium";
+        explicitYearsFound = true;
+        console.log(`   📊 Found explicit years: ${years} years → ${minYears}+ years (no upper limit)`);
       }
     }
   }
   
-  // Pattern 3: No explicit years, infer from level keywords
-  if (minYears === 0 && maxYears === 0) {
+  // Pattern 3: No explicit years, infer from level keywords ONLY
+  // CRITICAL: Only use level keywords if NO explicit years were found
+  if (!explicitYearsFound && minYears === 0 && maxYears === 0) {
     if (isIntern || isFresher) {
       minYears = 0;
       maxYears = 0;
       level = "Intern/Fresher";
       confidence = "medium";
-      console.log(`   📊 Detected: ${level} → 0 years`);
+      console.log(`   📊 Detected level keyword (no explicit years): ${level} → 0 years`);
     } else if (isJunior) {
       minYears = 0;
       maxYears = 2;
       level = "Junior";
       confidence = "medium";
-      console.log(`   📊 Detected: Junior → 0-2 years`);
+      console.log(`   📊 Detected level keyword (no explicit years): Junior → 0-2 years`);
     } else if (isMid) {
       minYears = 3;
       maxYears = 5;
       level = "Mid";
       confidence = "medium";
-      console.log(`   📊 Detected: Mid → 3-5 years`);
+      console.log(`   📊 Detected level keyword (no explicit years): Mid → 3-5 years`);
     } else if (isSenior) {
       minYears = 5;
       maxYears = 15;
       level = "Senior";
       confidence = "medium";
-      console.log(`   📊 Detected: Senior → 5-15 years`);
+      console.log(`   📊 Detected level keyword (no explicit years): Senior → 5-15 years`);
     } else {
       // No clear indication, assume entry to mid level
       minYears = 0;
       maxYears = 5;
       level = "Any";
       confidence = "low";
-      console.log(`   📊 No clear experience requirement → 0-5 years (default)`);
+      console.log(`   📊 No experience requirement found → 0-5 years (default)`);
     }
-  }
-  
-  // IMPORTANT: If job title contains "Senior" or "Sr.", enforce minimum 5 years
-  // This prevents senior positions from being miscategorized as junior
-  if (isSenior && maxYears < 5) {
-    console.log(`   ⚠️  Job title has "Senior" but extracted ${minYears}-${maxYears}y - adjusting to 5-15y`);
-    minYears = 5;
-    maxYears = 15;
-    level = "Senior";
-    confidence = "high";
+  } else if (explicitYearsFound) {
+    // Explicit years found - determine level from the years
+    if (minYears >= 5) {
+      level = "Senior";
+    } else if (minYears >= 3) {
+      level = "Mid";
+    } else if (minYears > 0) {
+      level = "Junior";
+    } else {
+      level = "Entry";
+    }
+    console.log(`   ℹ️  Level inferred from explicit years: ${level}`);
   }
   
   return { minYears, maxYears, level, confidence };
@@ -367,7 +402,7 @@ const calculateExperienceScore = (candidateYears, requiredYears) => {
 
 /**
  * Check if candidate experience matches job requirement
- * STRICT RULE: Show jobs from (candidate_exp - 2) to (candidate_exp + 1)
+ * RULE: Show jobs from 0 to (candidate_exp + 1)
  * @param {number} candidateYears - Candidate's years of experience
  * @param {object} jobExp - Job experience requirement {minYears, maxYears}
  * @returns {boolean} - True if matches
@@ -378,13 +413,13 @@ const isExperienceMatch = (candidateYears, jobExp) => {
   // If no experience requirement specified, accept all
   if (minYears === 0 && maxYears === 0) return true;
   
-  // STRICT MATCHING RULE: (candidate - 2) to (candidate + 1)
+  // NEW RULE: Show jobs from 0 to (candidate + 1)
   // Examples:
   // - 0 years → show 0-1 years jobs
   // - 2 years → show 0-3 years jobs
-  // - 5 years → show 3-6 years jobs
+  // - 5 years → show 0-6 years jobs
   
-  const allowedMin = Math.max(0, candidateYears - 2);
+  const allowedMin = 0;
   const allowedMax = candidateYears + 1;
   
   // Job must fall within allowed range
@@ -412,7 +447,7 @@ const matchJobsWithEmbeddings = async (resumeText, jobs, resumeAnalysis, options
 
   console.log(`⚡ [Embedding Matcher] Starting embedding-based matching for ${jobs.length} jobs`);
   console.log(`📋 [Embedding Matcher] Filters: Experience match ONLY (no skills filter)`);
-  console.log(`🎯 [Embedding Matcher] Scoring: Semantic (90%) + Experience (10%)`);
+  console.log(`🎯 [Embedding Matcher] Scoring: 100% Semantic Similarity (no experience bonus)`);
   console.log(`📊 [Embedding Matcher] Rescaling: [0.3-0.7] → [0-100%] (human-aligned perception)`);
   console.log(`⚙️  [Embedding Matcher] Preprocessing: Skills(4x), Qualifications(3x), Responsibilities(2x), Title(3x)`);
   const startTime = Date.now();
@@ -434,14 +469,63 @@ const matchJobsWithEmbeddings = async (resumeText, jobs, resumeAnalysis, options
     if (!preprocessedResume) {
       throw new Error('Resume preprocessing failed - empty result');
     }
+    
+    // Log preprocessed resume text for verification
+    console.log('\n' + '='.repeat(80));
+    console.log('📝 [RESUME TEXT - PREPROCESSED]');
+    console.log('='.repeat(80));
+    console.log(preprocessedResume);
+    console.log('='.repeat(80));
+    console.log(`📊 Resume length: ${preprocessedResume.length} characters`);
+    
+    // Extract and log technical keywords from resume
+    const resumeTechKeywords = extractTechnicalKeywords(preprocessedResume);
+    console.log('\n🔧 [RESUME TECHNICAL KEYWORDS]');
+    console.log(`Found ${resumeTechKeywords.length} technical keywords:`);
+    console.log(resumeTechKeywords.join(', '));
+    console.log('='.repeat(80) + '\n');
 
     // Step 3: PHASE 1 - Experience Filtering ONLY (before embeddings)
-    console.log('🔍 [Phase 1] Filtering by experience only (no skills filter)...');
+    console.log('🔍 [Phase 1] Filtering by experience (0 to candidate+1 years)...');
+    console.log(`   📊 Showing jobs: 0-${resumeYears + 1} years (candidate has ${resumeYears} years)`);
     
-    const phase1Jobs = jobs.map(job => {
+    const phase1Jobs = jobs.map((job, index) => {
       const jobExp = extractJobExperience(job);
       const preprocessedJob = preprocessJobDescription(job);
       const expMatch = isExperienceMatch(resumeYears, jobExp);
+      
+      // Log first 3 jobs' preprocessed text for verification
+      if (index < 3) {
+        console.log('\n' + '='.repeat(80));
+        console.log(`📋 [JOB #${index + 1} - PREPROCESSED TEXT]`);
+        console.log(`Title: ${job.job_title}`);
+        console.log(`Company: ${job.employer_name}`);
+        console.log(`Experience Required: ${jobExp.minYears}-${jobExp.maxYears} years`);
+        console.log(`Experience Match: ${expMatch ? '✅ YES' : '❌ NO'}`);
+        console.log('='.repeat(80));
+        console.log(preprocessedJob);
+        console.log('='.repeat(80));
+        console.log(`📊 Job text length: ${preprocessedJob.length} characters`);
+        
+        // Extract and log technical keywords from job
+        const jobTechKeywords = extractTechnicalKeywords(preprocessedJob);
+        console.log(`\n🔧 [JOB #${index + 1} TECHNICAL KEYWORDS]`);
+        console.log(`Found ${jobTechKeywords.length} technical keywords:`);
+        console.log(jobTechKeywords.join(', '));
+        
+        // Find and log common keywords
+        const commonKeywords = findCommonKeywords(resumeTechKeywords, jobTechKeywords);
+        console.log(`\n✅ [COMMON KEYWORDS - JOB #${index + 1}]`);
+        console.log(`${commonKeywords.length} keywords in common:`);
+        console.log(commonKeywords.join(', ') || 'None');
+        
+        // Find missing keywords
+        const missingKeywords = jobTechKeywords.filter(k => !commonKeywords.includes(k));
+        console.log(`\n❌ [MISSING KEYWORDS - JOB #${index + 1}]`);
+        console.log(`${missingKeywords.length} keywords missing from resume:`);
+        console.log(missingKeywords.join(', ') || 'None');
+        console.log('='.repeat(80) + '\n');
+      }
       
       return {
         job,
@@ -485,8 +569,8 @@ const matchJobsWithEmbeddings = async (resumeText, jobs, resumeAnalysis, options
     const jobsForEmbedding = phase1Passed.map(item => item.job);
     const jobsWithEmbeddings = await processJobsInBatches(jobsForEmbedding, batchSize);
 
-    // Step 5: PHASE 3 - Content scoring with embeddings
-    console.log('🎯 [Phase 3] Scoring job content with embeddings...');
+    // Step 5: PHASE 2 - Content scoring with embeddings (100% semantic)
+    console.log('🎯 [Phase 2] Scoring job content with embeddings (100% semantic)...');
     
     const scoredJobs = jobsWithEmbeddings
       .filter(item => item.embedding !== null)
@@ -506,27 +590,20 @@ const matchJobsWithEmbeddings = async (resumeText, jobs, resumeAnalysis, options
         // Range: [0.3-0.7] → [0-1] for human-aligned perception
         const rescaledSimilarity = Math.max(0, Math.min(1, (rawSimilarity - 0.2) / 0.4));
         
-        // Step 2: Calculate experience score (can be 0 to 1.1)
+        // Final score = 100% semantic similarity (no experience bonus)
+        const finalScore = rescaledSimilarity;
+        const finalScorePercent = Math.round(finalScore * 100);
+
+        // Calculate required years for display purposes only
         const requiredYears = phase1Data.jobExp.minYears > 0 
           ? Math.round((phase1Data.jobExp.minYears + phase1Data.jobExp.maxYears) / 2)
           : phase1Data.jobExp.maxYears;
-        const experienceScore = calculateExperienceScore(resumeYears, requiredYears);
-        
-        // Step 3: Final score = 90% semantic + 10% experience
-        // No keyword matching - embeddings handle semantic relationships naturally
-        // Cap at 100% to prevent scores exceeding 100%
-        const finalScore = Math.min(1.0, 
-          (rescaledSimilarity * 0.90) + 
-          (experienceScore * 0.10)
-        );
-        const finalScorePercent = Math.round(finalScore * 100);
 
         return {
           ...item.job,
           embedding_match_score: finalScorePercent,
           content_similarity_percent: Math.round(rescaledSimilarity * 100),
           raw_similarity_percent: Math.round(rawSimilarity * 100),
-          experience_score_percent: Math.round(experienceScore * 100),
           experience_match: {
             candidate_years: resumeYears,
             candidate_level: resumeLevel,
@@ -534,14 +611,12 @@ const matchJobsWithEmbeddings = async (resumeText, jobs, resumeAnalysis, options
             required_max: phase1Data.jobExp.maxYears,
             required_avg: requiredYears,
             required_level: phase1Data.jobExp.level,
-            is_match: phase1Data.expMatch,
-            score: Math.round(experienceScore * 100)
+            is_match: phase1Data.expMatch
           },
           _debug: {
             raw_similarity: rawSimilarity,
             rescaled_similarity: rescaledSimilarity,
-            experience_score: experienceScore,
-            formula: 'semantic(90%) + experience(10%)',
+            formula: '100% semantic similarity',
             rescaling_note: 'Human-aligned: [0.3-0.7] → [0-100%] matches human perception'
           }
         };
@@ -558,17 +633,12 @@ const matchJobsWithEmbeddings = async (resumeText, jobs, resumeAnalysis, options
 
     console.log(`✂️ [Embedding Matcher] Scored ${scoredJobs.length} jobs`);
 
-    // Debug: Log first few scores
-    console.log('🔍 [Debug] Top 5 matches:', 
-      scoredJobs.slice(0, 5).map(j => ({
-        title: j.job_title,
-        final_score: j.embedding_match_score,
-        semantic: j.content_similarity_percent,
-        raw: j.raw_similarity_percent,
-        experience: j.experience_score_percent,
-        exp_req: `${j.experience_match.required_min}-${j.experience_match.required_max}y`
-      }))
-    );
+    // Debug: Log ALL scored jobs (not just top 5)
+    console.log(`\n🔍 [Debug] All ${scoredJobs.length} matched jobs:`);
+    scoredJobs.forEach((job, index) => {
+      console.log(`  ${index + 1}. ${job.job_title}`);
+      console.log(`     Score: ${job.embedding_match_score}% | Semantic: ${job.content_similarity_percent}% | Raw: ${job.raw_similarity_percent}% | Exp: ${job.experience_match.required_min}-${job.experience_match.required_max}y`);
+    });
 
     // Step 6: Filter by threshold and return top N
     const filteredJobs = scoredJobs
@@ -586,6 +656,61 @@ const matchJobsWithEmbeddings = async (resumeText, jobs, resumeAnalysis, options
     console.error('[Embedding Matcher] Error during matching:', error.message);
     throw error;
   }
+};
+
+/**
+ * Extract technical skills and keywords from text
+ * Focuses on programming languages, frameworks, tools, and technologies
+ * @param {string} text - Preprocessed text
+ * @returns {Array<string>} - Technical keywords found
+ */
+const extractTechnicalKeywords = (text) => {
+  if (!text) return [];
+
+  // Common technical keywords (programming languages, frameworks, tools, cloud, databases, etc.)
+  const technicalPatterns = [
+    // Programming Languages
+    'python', 'java', 'javascript', 'typescript', 'c\\+\\+', 'c#', 'csharp', 'ruby', 'php', 'swift', 'kotlin', 'go', 'golang', 'rust', 'scala', 'r\\b',
+    // Web Frameworks
+    'react', 'reactjs', 'angular', 'vue', 'vuejs', 'nodejs', 'node', 'express', 'django', 'flask', 'fastapi', 'spring', 'springboot', 'laravel', 'rails',
+    // ML/AI
+    'tensorflow', 'pytorch', 'keras', 'scikit-learn', 'sklearn', 'pandas', 'numpy', 'opencv', 'nlp', 'machine learning', 'deep learning', 'neural network', 'llm', 'gpt', 'bert', 'transformers', 'huggingface',
+    // Cloud & DevOps
+    'aws', 'azure', 'gcp', 'google cloud', 'docker', 'kubernetes', 'k8s', 'jenkins', 'gitlab', 'github', 'ci/cd', 'terraform', 'ansible', 'lambda', 'ec2', 's3', 'sagemaker', 'bedrock',
+    // Databases
+    'sql', 'mysql', 'postgresql', 'postgres', 'mongodb', 'redis', 'elasticsearch', 'dynamodb', 'cassandra', 'oracle', 'sqlite',
+    // Tools & Others
+    'git', 'linux', 'unix', 'bash', 'api', 'rest', 'restful', 'graphql', 'microservices', 'agile', 'scrum', 'jira', 'kafka', 'spark', 'hadoop', 'airflow', 'mlflow'
+  ];
+
+  const textLower = text.toLowerCase();
+  const foundKeywords = [];
+
+  // Find all matching technical keywords
+  for (const pattern of technicalPatterns) {
+    const regex = new RegExp(`\\b${pattern}\\b`, 'gi');
+    if (regex.test(textLower)) {
+      // Normalize the keyword (remove regex escapes)
+      const normalized = pattern.replace(/\\b|\\+|\\/g, '').replace(/\s+/g, ' ');
+      if (!foundKeywords.includes(normalized)) {
+        foundKeywords.push(normalized);
+      }
+    }
+  }
+
+  return foundKeywords.sort();
+};
+
+/**
+ * Find common technical keywords between resume and job
+ * @param {Array<string>} resumeKeywords - Resume technical keywords
+ * @param {Array<string>} jobKeywords - Job technical keywords
+ * @returns {Array<string>} - Common keywords
+ */
+const findCommonKeywords = (resumeKeywords, jobKeywords) => {
+  const resumeSet = new Set(resumeKeywords.map(k => k.toLowerCase()));
+  const common = jobKeywords.filter(k => resumeSet.has(k.toLowerCase()));
+  return common;
 };
 
 /**
@@ -628,5 +753,7 @@ module.exports = {
   getExperienceLevel,
   extractJobExperience,
   isExperienceMatch,
-  calculateExperienceScore
+  calculateExperienceScore,
+  extractTechnicalKeywords,
+  findCommonKeywords
 };

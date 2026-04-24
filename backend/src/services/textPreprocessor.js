@@ -34,7 +34,7 @@ const preprocessText = (text, options = {}) => {
   const {
     removeStopwords = true,
     preserveTechnicalTerms = true,
-    maxLength = 5000
+    maxLength = 15000 // 15k character --> approx 1500 words
   } = options;
 
   if (!text || typeof text !== 'string') {
@@ -55,6 +55,10 @@ const preprocessText = (text, options = {}) => {
 
   // Step 5: Normalize case to lowercase
   cleaned = cleaned.toLowerCase();
+  
+  // Step 5.5: Normalize all dash types to regular hyphen
+  // Convert en-dash (–), em-dash (—), and other dash variants to regular hyphen (-)
+  cleaned = cleaned.replace(/[–—−]/g, '-');
 
   // Step 6: Remove special characters but preserve technical terms
   if (preserveTechnicalTerms) {
@@ -98,7 +102,7 @@ const preprocessResume = (resumeText) => {
   return preprocessText(resumeText, {
     removeStopwords: true,
     preserveTechnicalTerms: true,
-    maxLength: 5000
+    maxLength: 15000  // Increased from 5000 to capture full resumes
   });
 };
 
@@ -149,7 +153,7 @@ const preprocessJobDescription = (job) => {
   return preprocessText(jobText, {
     removeStopwords: true,
     preserveTechnicalTerms: true,
-    maxLength: 3000
+    maxLength: 15000  // Increased from 3000 to capture full job descriptions
   });
 };
 
