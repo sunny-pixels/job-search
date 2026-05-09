@@ -226,7 +226,7 @@ const getMatchingJobsEmbedding = async (req, res) => {
     
     const allJobs = await searchMultipleQueries(searchData.queries, {
       num_pages: 1, // 1 page = 10 jobs per query - reduced to avoid rate limits
-      date_posted: 'month',
+      date_posted: 'week',
       country: 'us',
       job_requirements: searchData.requirements // Filter by experience level
     });
