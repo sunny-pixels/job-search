@@ -16,7 +16,7 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const { preprocessResume, preprocessJobDescription } = require('../src/services/textPreprocessor');
-const { extractTechnicalKeywords, findCommonKeywords, findMissingKeywords } = require('../src/services/technicalPatterns');
+const { extractTechnicalKeywords, findCommonKeywords, findMissingKeywords } = require('../src/services/technicalTerms.js');
 
 const colors = {
   reset: '\x1b[0m',
@@ -85,11 +85,11 @@ function cosineSimilarity(vecA, vecB) {
 
 async function main() {
   printHeader('🔬 COVERAGE + SEMANTIC SIMILARITY TEST');
-  console.log(colors.cyan + 'New Approach: Coverage (60%) + Semantic Similarity (40%)' + colors.reset);
+  console.log(colors.cyan + 'New Approach: Coverage (25%) + Semantic Similarity (75%)' + colors.reset);
   
   // Read files
-  const resumePath = path.join(__dirname, 'resume.txt');
-  const jdPath = path.join(__dirname, 'jd.txt');
+  const resumePath = path.join(__dirname, 'resume1.txt');
+  const jdPath = path.join(__dirname, 'jd1.txt');
   
   const resumeText = fs.readFileSync(resumePath, 'utf-8');
   const jdText = fs.readFileSync(jdPath, 'utf-8');
@@ -148,47 +148,47 @@ async function main() {
   console.log(`   Formula: commonKeywords / jdKeywords = ${commonKeywords.length} / ${jdKeywords.length}`);
   console.log(`   Measures: How many JD keywords are present in resume`);
   
-  // Step 5: Generate embeddings FROM COMMON KEYWORDS ONLY
+  // Step 5: Generate embeddings FROM ALL KEYWORDS
   printSection('🧠 STEP 5: GENERATE EMBEDDINGS FOR SEMANTIC SIMILARITY');
   
   // Convert keywords to text
-  const commonKeywordText = commonKeywords.join(' ');
+  const resumeKeywordText = resumeKeywords.join(' ');
   const jdKeywordText = jdKeywords.join(' ');
   
-  console.log(`\n${colors.yellow}Common keyword text (${commonKeywordText.length} chars):${colors.reset}`);
-  console.log(commonKeywordText);
+  console.log(`\n${colors.yellow}Resume keyword text (${resumeKeywordText.length} chars):${colors.reset}`);
+  console.log(resumeKeywordText);
   
   console.log(`\n${colors.yellow}JD keyword text (${jdKeywordText.length} chars):${colors.reset}`);
   console.log(jdKeywordText);
   
-  console.log('\nGenerating embedding from common keywords...');
-  const commonEmbedding = await generateEmbedding(commonKeywordText);
-  console.log(`✓ Common keyword embedding: ${commonEmbedding.length} dimensions`);
+  console.log('\nGenerating embedding from resume keywords...');
+  const resumeEmbedding = await generateEmbedding(resumeKeywordText);
+  console.log(`✓ Resume keyword embedding: ${resumeEmbedding.length} dimensions`);
   
   console.log('\nGenerating embedding from JD keywords...');
   const jdEmbedding = await generateEmbedding(jdKeywordText);
   console.log(`✓ JD keyword embedding: ${jdEmbedding.length} dimensions`);
   
   // Step 6: Calculate Semantic Similarity
-  printSection('� STEP 6: CALCULATE SEMANTIC SIMILARITY');
+  printSection('🔍 STEP 6: CALCULATE SEMANTIC SIMILARITY');
   
-  const semanticSimilarity = cosineSimilarity(commonEmbedding, jdEmbedding);
+  const semanticSimilarity = cosineSimilarity(resumeEmbedding, jdEmbedding);
   const semanticPercent = (semanticSimilarity * 100).toFixed(1);
   
   console.log(`\n${colors.bright}Semantic Similarity: ${semanticPercent}%${colors.reset}`);
-  console.log(`   Formula: cosine(commonEmbedding, jdEmbedding)`);
-  console.log(`   Measures: How semantically similar the common keywords are to JD keywords`);
+  console.log(`   Formula: cosine(resumeKeywordEmbedding, jdKeywordEmbedding)`);
+  console.log(`   Measures: How semantically similar ALL resume keywords are to ALL JD keywords`);
   
   // Step 7: Calculate Final Score
   printSection('🎯 STEP 7: CALCULATE FINAL SCORE');
   
-  const finalScore = (coverageScore * 0.6) + (semanticSimilarity * 0.4);
+  const finalScore = (coverageScore * 0.25) + (semanticSimilarity * 0.75);
   const finalPercent = (finalScore * 100).toFixed(1);
   
   console.log(`\n${colors.bright}Final Score Formula:${colors.reset}`);
-  console.log(`   final = (coverage × 0.6) + (semantic × 0.4)`);
-  console.log(`   final = (${coveragePercent}% × 0.6) + (${semanticPercent}% × 0.4)`);
-  console.log(`   final = ${(coverageScore * 0.6 * 100).toFixed(1)}% + ${(semanticSimilarity * 0.4 * 100).toFixed(1)}%`);
+  console.log(`   final = (coverage × 0.25) + (semantic × 0.75)`);
+  console.log(`   final = (${coveragePercent}% × 0.25) + (${semanticPercent}% × 0.75)`);
+  console.log(`   final = ${(coverageScore * 0.25 * 100).toFixed(1)}% + ${(semanticSimilarity * 0.75 * 100).toFixed(1)}%`);
   console.log(`\n${colors.bright}${colors.green}Final Score: ${finalPercent}%${colors.reset}`);
   
   // Interpretation
@@ -207,26 +207,26 @@ async function main() {
   // Analysis
   printSection('📊 NEW SCORING APPROACH ANALYSIS');
   
-  console.log(`\n${colors.cyan}✅ Coverage Score (60% weight):${colors.reset}`);
+  console.log(`\n${colors.cyan}✅ Coverage Score (25% weight):${colors.reset}`);
   console.log('  • Measures keyword overlap');
   console.log('  • Simple ratio: common / total JD keywords');
   console.log('  • Rewards having the required skills');
   
-  console.log(`\n${colors.cyan}✅ Semantic Similarity (40% weight):${colors.reset}`);
-  console.log('  • Measures how similar common keywords are to JD');
+  console.log(`\n${colors.cyan}✅ Semantic Similarity (75% weight):${colors.reset}`);
+  console.log('  • Measures how similar ALL resume keywords are to JD keywords');
   console.log('  • Uses embeddings for semantic understanding');
   console.log('  • Captures context and relationships');
   
   console.log(`\n${colors.green}✅ Benefits:${colors.reset}`);
-  console.log('  • Balanced approach (coverage + semantics)');
-  console.log('  • Coverage ensures key skills are present');
-  console.log('  • Semantics ensures skills are relevant');
-  console.log('  • More interpretable than pure embedding similarity');
+  console.log('  • Semantic-focused approach (75% semantic weight)');
+  console.log('  • Coverage ensures minimum skills are present');
+  console.log('  • Semantics evaluates overall skill relevance');
+  console.log('  • Better for matching related/transferable skills');
   
   console.log(`\n${colors.yellow}⚠️  Considerations:${colors.reset}`);
   console.log('  • Still depends on keyword extraction quality');
-  console.log('  • Common keywords must be meaningful');
-  console.log('  • Semantic similarity only on common keywords');
+  console.log('  • Semantic similarity compares full keyword sets');
+  console.log('  • More comprehensive than common-keyword-only approach');
   
   // Summary
   printHeader('📋 SUMMARY');
@@ -246,15 +246,15 @@ async function main() {
   console.log(`\n${colors.bright}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${colors.reset}`);
   console.log(`${colors.bright}📊 SCORING BREAKDOWN:${colors.reset}`);
   console.log(`${colors.bright}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${colors.reset}`);
-  console.log(`${colors.bright}Coverage Score:${colors.reset}      ${coveragePercent}% (weight: 60%)`);
-  console.log(`${colors.bright}Semantic Similarity:${colors.reset} ${semanticPercent}% (weight: 40%)`);
+  console.log(`${colors.bright}Coverage Score:${colors.reset}      ${coveragePercent}% (weight: 25%)`);
+  console.log(`${colors.bright}Semantic Similarity:${colors.reset} ${semanticPercent}% (weight: 75%)`);
   console.log(`${colors.bright}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${colors.reset}`);
   console.log(`${colors.bright}${colors.green}FINAL SCORE:${colors.reset}         ${finalPercent}%`);
   console.log(`${colors.bright}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${colors.reset}`);
   
   console.log(`\n${colors.yellow}💡 This approach combines:${colors.reset}`);
-  console.log(`   • Coverage (60%): Ensures required skills are present`);
-  console.log(`   • Semantics (40%): Ensures skills are contextually relevant`);
+  console.log(`   • Coverage (25%): Ensures minimum required skills are present`);
+  console.log(`   • Semantics (75%): Prioritizes contextual relevance and transferable skills`);
   
   console.log('\n' + '='.repeat(80) + '\n');
 }

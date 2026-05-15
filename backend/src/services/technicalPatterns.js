@@ -698,7 +698,15 @@
     // ============================================================
 
     // ─── Deep Learning Frameworks ───
-    '\\bpytorch\\b', '\\btorch\\b',
+    '\\bpytorch\\b', '\\btorch\\b', '\\betl\\s*pipelines?\\b',
+  '\\bkibana\\b',
+  '\\btableau\\b',
+  '\\bpower\\s*bi\\b',
+  '\\bpytorch\\b',
+  '\\btensor\\s*flow\\b',
+  '\\bkeras\\b',
+  '\\bhadoop\\b',
+  '\\bmysql\\b',
     '\\bpytorch lightning\\b',
     '\\bfastai\\b',
     '\\btensorflow\\b', '\\btf\\b',             // [CONTEXT] — "tf" alone risky; use with ML context
