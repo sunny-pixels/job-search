@@ -5,7 +5,7 @@
 
 const { preprocessResume, preprocessJobDescription } = require('./textPreprocessor');
 const { generateEmbedding, generateBatchEmbeddings } = require('./embeddingClient');
-const { extractTechnicalKeywords, findCommonKeywords, findMissingKeywords } = require('./technicalPatterns');
+const { extractTechnicalKeywords, findCommonKeywords, findMissingKeywords } = require('./technicalTerms');
 
 /**
  * Compute cosine similarity between two vectors
@@ -484,9 +484,9 @@ const matchJobsWithEmbeddings = async (resumeText, jobs, resumeAnalysis, options
 
   console.log(`⚡ [Embedding Matcher] Starting embedding-based matching for ${jobs.length} jobs`);
   console.log(`📋 [Embedding Matcher] Filters: Experience match ONLY (no skills filter)`);
-  console.log(`🎯 [Embedding Matcher] Scoring: Coverage (60%) + Semantic Similarity (40%)`);
+  console.log(`🎯 [Embedding Matcher] Scoring: Coverage (25%) + Semantic Similarity (75%)`);
   console.log(`📊 [Embedding Matcher] Coverage = commonKeywords / jdKeywords`);
-  console.log(`📊 [Embedding Matcher] Semantic  = cosine(commonKeywordEmbedding, jdKeywordEmbedding)`);
+  console.log(`📊 [Embedding Matcher] Semantic  = cosine(resumeKeywordEmbedding, jdKeywordEmbedding)`);
   const startTime = Date.now();
 
   try {
@@ -587,7 +587,7 @@ const matchJobsWithEmbeddings = async (resumeText, jobs, resumeAnalysis, options
     }
 
     // Step 4: PHASE 2 - Score each job using Coverage + Semantic approach
-    console.log('🧠 [Phase 2] Scoring jobs using Coverage (60%) + Semantic Similarity (40%)...');
+    console.log('🧠 [Phase 2] Scoring jobs using Coverage (25%) + Semantic Similarity (75%)...');
     console.log(`   📊 Resume has ${resumeTechKeywords.length} technical keywords`);
 
     const scoredJobs = [];
@@ -601,27 +601,26 @@ const matchJobsWithEmbeddings = async (resumeText, jobs, resumeAnalysis, options
       const commonKeywords = findCommonKeywords(resumeTechKeywords, jdKeywords);
       const missingKeywords = findMissingKeywords(resumeTechKeywords, jdKeywords);
 
-      // ── Coverage Score (60%) ─────────────────────────────────────────────
+      // ── Coverage Score (25%) ─────────────────────────────────────────────
       // How many of the JD's required keywords appear in the resume?
       const coverageScore = jdKeywords.length > 0
         ? commonKeywords.length / jdKeywords.length
         : 0;
 
-      // ── Semantic Similarity (40%) ────────────────────────────────────────
-      // Embed only the common keywords vs all JD keywords
-      // If there are no common keywords we can skip embedding (semantic = 0)
+      // ── Semantic Similarity (75%) ────────────────────────────────────────
+      // Compare ALL resume keywords vs ALL JD keywords (not just common)
       let semanticSimilarity = 0;
 
-      if (commonKeywords.length > 0 && jdKeywords.length > 0) {
-        const commonKeywordText = commonKeywords.join(' ');
+      if (resumeTechKeywords.length > 0 && jdKeywords.length > 0) {
+        const resumeKeywordText = resumeTechKeywords.join(' ');
         const jdKeywordText     = jdKeywords.join(' ');
 
         try {
-          const [commonEmbedding, jdEmbedding] = await Promise.all([
-            generateEmbedding(commonKeywordText),
+          const [resumeEmbedding, jdEmbedding] = await Promise.all([
+            generateEmbedding(resumeKeywordText),
             generateEmbedding(jdKeywordText)
           ]);
-          semanticSimilarity = cosineSimilarity(commonEmbedding, jdEmbedding);
+          semanticSimilarity = cosineSimilarity(resumeEmbedding, jdEmbedding);
           semanticSimilarity = Math.max(0, Math.min(1, semanticSimilarity));
         } catch (embErr) {
           console.warn(`   ⚠️  Embedding failed for job ${i + 1}, using semantic=0:`, embErr.message);
@@ -630,7 +629,7 @@ const matchJobsWithEmbeddings = async (resumeText, jobs, resumeAnalysis, options
       }
 
       // ── Final Score ──────────────────────────────────────────────────────
-      const finalScore        = (coverageScore * 0.6) + (semanticSimilarity * 0.4);
+      const finalScore        = (coverageScore * 0.25) + (semanticSimilarity * 0.75);
       const rawFinalPercent   = Math.round(finalScore * 100);          // raw, for _debug
       const finalScorePercent = boostFinalScore(rawFinalPercent);      // boosted, shown to user
       const coveragePercent   = Math.round(coverageScore * 100);
@@ -672,7 +671,7 @@ const matchJobsWithEmbeddings = async (resumeText, jobs, resumeAnalysis, options
           final_score: finalScore,
           raw_final_percent: rawFinalPercent,
           boosted_final_percent: finalScorePercent,
-          formula: 'final = (coverage × 0.6) + (semantic × 0.4)',
+          formula: 'final = (coverage × 0.25) + (semantic × 0.75)',
           boost_formula: 'piecewise linear: 80%→90%, 70%→85%, 65%→80%, 60%→75%, 50%→65%',
           common_keywords_count: commonKeywords.length,
           jd_keywords_count: jdKeywords.length

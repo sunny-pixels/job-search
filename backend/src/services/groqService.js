@@ -9,7 +9,7 @@ const analyzeResumeWithGroq = async (resumeText) => {
 {
   "primary_roles": ["exact job titles this person is targeting or has held"],
   "skills": ["skills explicitly listed in the resume"],
-  "job_keywords": ["5-8 job titles to search on job boards that match this person's actual domain. Examples: if HR resume → HR Manager, Recruiter, Talent Acquisition Specialist; if sales → Sales Executive, Account Manager, Business Development; if logistics → Supply Chain Analyst, Logistics Coordinator; if security → SOC Analyst, Security Engineer; if software → Software Engineer, Full-Stack Developer. ONLY job titles, never technology or tool names."],
+  "job_keywords": ["3-4 job titles to search on job boards that match this person's actual domain. Examples: if DevOps resume → DevOps Engineer, Cloud Engineer, Site Reliability Engineer; if ML resume → Machine Learning Engineer, AI Engineer, Data Scientist; if Full Stack → Full Stack Developer, Software Engineer, Backend Developer. ONLY job titles, never technology or tool names."],
   "experience_level": "Intern or Junior or Mid or Senior",
   "experience_years": <number>,
   "programming_languages": ["only if explicitly listed in resume, else empty array"],
@@ -21,11 +21,16 @@ const analyzeResumeWithGroq = async (resumeText) => {
   "internships": ["internship company or role if explicitly mentioned"]
 }
 
-RULES:
-- job_keywords: reflect the ACTUAL domain. Never cross domains. A logistics resume must never have software titles.
+CRITICAL RULES:
+- primary_roles: Extract ONLY the exact job titles written in the resume. Do NOT generate variations.
+- job_keywords: Generate 3-4 SIMILAR job titles for job board searching based on the domain. These should be related roles that match the candidate's skills and experience.
+  * If resume shows "DevOps Engineer" → ["DevOps Engineer", "Cloud Engineer", "Site Reliability Engineer", "Infrastructure Engineer"]
+  * If resume shows "Machine Learning Engineer" → ["Machine Learning Engineer", "AI Engineer", "Data Scientist", "ML Researcher"]
+  * If resume shows "Full Stack Developer" → ["Full Stack Developer", "Software Engineer", "Backend Developer", "Frontend Developer"]
+  * If resume shows "Network Engineer" → ["Network Engineer", "Network Administrator", "Systems Engineer", "Infrastructure Engineer"]
+  * IMPORTANT: job_keywords should reflect the ACTUAL domain. Never cross domains. A DevOps resume must never have ML titles.
 - experience_years: ONLY paid full-time/part-time work. Internships = 0.5 per 6 months. Education and personal projects = 0. No work experience = 0.
 - experience_level: Intern = 0 yrs, Junior = 0-2 yrs, Mid = 3-5 yrs, Senior = 5+ yrs
-- primary_roles: what this person actually is, not what they aspire to be unless stated
 
 Resume:
 ${resumeText.substring(0, 4000)}`;
@@ -73,6 +78,38 @@ ${resumeText.substring(0, 4000)}`;
   else if (safeExpYears <= 5) expLevel = "Mid";
   else expLevel = "Senior";
 
+  // ── FILTER PRIMARY ROLES: Remove intern positions if non-intern roles exist ──
+  let primaryRoles = Array.isArray(parsed.primary_roles) && parsed.primary_roles.length > 0
+    ? parsed.primary_roles
+    : ["Professional"];
+
+  // Check if there are any intern roles
+  const internRoles = primaryRoles.filter(role => {
+    const roleLower = role.toLowerCase();
+    return roleLower.includes('intern') || roleLower.includes('internship');
+  });
+
+  // Check if there are any non-intern roles
+  const nonInternRoles = primaryRoles.filter(role => {
+    const roleLower = role.toLowerCase();
+    return !roleLower.includes('intern') && !roleLower.includes('internship');
+  });
+
+  // PRIORITIZATION LOGIC:
+  // If both intern and non-intern roles exist → use only non-intern roles
+  // If only intern roles exist → use intern roles
+  // If only non-intern roles exist → use non-intern roles
+  if (nonInternRoles.length > 0) {
+    primaryRoles = nonInternRoles;
+    if (internRoles.length > 0) {
+      console.log(`   ℹ️  Filtered out ${internRoles.length} intern role(s): [${internRoles.join(', ')}]`);
+      console.log(`   ✅ Using ${nonInternRoles.length} non-intern role(s): [${nonInternRoles.join(', ')}]`);
+    }
+  } else if (internRoles.length > 0) {
+    primaryRoles = internRoles;
+    console.log(`   ℹ️  Only intern roles found, using: [${internRoles.join(', ')}]`);
+  }
+
   // Validate job_keywords — only keep strings, no empty entries
   const rawKeywords = Array.isArray(parsed.job_keywords)
     ? parsed.job_keywords.filter(k => typeof k === 'string' && k.trim().length > 2)
@@ -81,11 +118,10 @@ ${resumeText.substring(0, 4000)}`;
   // Fallback: if Groq returned too few, use primary_roles directly
   const jobKeywords = rawKeywords.length >= 2
     ? rawKeywords
-    : [...rawKeywords, ...(Array.isArray(parsed.primary_roles) ? parsed.primary_roles : [])].slice(0, 8);
+    : [...rawKeywords, ...primaryRoles].slice(0, 8);
 
   return {
-    primary_roles: Array.isArray(parsed.primary_roles) && parsed.primary_roles.length > 0
-      ? parsed.primary_roles : ["Professional"],
+    primary_roles: primaryRoles,
     skills: Array.isArray(parsed.skills) ? parsed.skills.filter(s => typeof s === 'string') : [],
     job_keywords: jobKeywords,
     experience_level: expLevel,

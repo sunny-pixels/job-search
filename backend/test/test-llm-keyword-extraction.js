@@ -241,8 +241,8 @@ async function main() {
   printHeader('🤖 LLM-BASED KEYWORD EXTRACTION & SEMANTIC MATCHING (GROQ)');
   console.log(colors.cyan + 'Extract → Extract → Semantic Match via LLM' + colors.reset);
 
-  const resumePath = path.join(__dirname, 'resume1.txt');
-  const jdPath     = path.join(__dirname, 'jd1.txt');
+  const resumePath = path.join(__dirname, 'resume.txt');
+  const jdPath     = path.join(__dirname, 'jd.txt');
 
   const resumeText = fs.readFileSync(resumePath, 'utf-8');
   const jdText     = fs.readFileSync(jdPath, 'utf-8');

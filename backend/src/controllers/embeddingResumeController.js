@@ -52,40 +52,64 @@ const uploadResumeEmbedding = async (req, res) => {
       console.log(`📄 [Embedding] Extracting text from new ${newFileType.toUpperCase()} upload...`);
       const resumeText = await extractTextFromFile(req.file.buffer, newFileType);
       
+      // ALWAYS re-analyze with Groq to get latest parsing logic
+      console.log("🔄 [Embedding] Re-analyzing resume with latest Groq logic...");
+      const analysisData = await analyzeResumeWithGroq(resumeText);
+      
       // If uploading DOCX (regardless of what existed before), save it
       if (newFileType === 'docx') {
         console.log("📄 [Embedding] Saving DOCX file for format preservation...");
         const { fileUrl, fileName, fileType, savedFileName } = await saveFile(req.file.buffer, req.file.originalname);
         
-        // Update database with new file info
+        // Update database with new file info AND new analysis
         existingResume.fileUrl = fileUrl;
         existingResume.fileName = fileName;
         existingResume.fileType = fileType;
         existingResume.extractedData.resumeFullText = resumeText;
+        existingResume.extractedData.primary_roles = analysisData.primary_roles;
+        existingResume.extractedData.skills = analysisData.skills;
+        existingResume.extractedData.job_keywords = analysisData.job_keywords;
+        existingResume.extractedData.experience_level = analysisData.experience_level;
+        existingResume.extractedData.experience_years = analysisData.experience_years;
+        existingResume.extractedData.programming_languages = analysisData.programming_languages;
+        existingResume.extractedData.frameworks = analysisData.frameworks;
+        existingResume.extractedData.tools = analysisData.tools;
+        existingResume.extractedData.summary = analysisData.summary;
         await existingResume.save();
-        console.log("✅ [Embedding] Updated to DOCX file");
+        console.log("✅ [Embedding] Updated to DOCX file with fresh analysis");
       } else if (!existingResume.extractedData.resumeFullText || existingResume.extractedData.resumeFullText.trim().length === 0) {
-        // For PDF, only update text if missing
+        // For PDF, update text and analysis if missing
         existingResume.extractedData.resumeFullText = resumeText;
+        existingResume.extractedData.primary_roles = analysisData.primary_roles;
+        existingResume.extractedData.skills = analysisData.skills;
+        existingResume.extractedData.job_keywords = analysisData.job_keywords;
+        existingResume.extractedData.experience_level = analysisData.experience_level;
+        existingResume.extractedData.experience_years = analysisData.experience_years;
+        existingResume.extractedData.programming_languages = analysisData.programming_languages;
+        existingResume.extractedData.frameworks = analysisData.frameworks;
+        existingResume.extractedData.tools = analysisData.tools;
+        existingResume.extractedData.summary = analysisData.summary;
         await existingResume.save();
-        console.log("✅ [Embedding] Updated resume text");
+        console.log("✅ [Embedding] Updated resume text with fresh analysis");
+      } else {
+        // Just update the analysis data (keep existing file)
+        existingResume.extractedData.primary_roles = analysisData.primary_roles;
+        existingResume.extractedData.skills = analysisData.skills;
+        existingResume.extractedData.job_keywords = analysisData.job_keywords;
+        existingResume.extractedData.experience_level = analysisData.experience_level;
+        existingResume.extractedData.experience_years = analysisData.experience_years;
+        existingResume.extractedData.programming_languages = analysisData.programming_languages;
+        existingResume.extractedData.frameworks = analysisData.frameworks;
+        existingResume.extractedData.tools = analysisData.tools;
+        existingResume.extractedData.summary = analysisData.summary;
+        await existingResume.save();
+        console.log("✅ [Embedding] Updated analysis with latest Groq logic");
       }
       
       lastAnalyzedResumeEmbedding = {
         filename: existingResume.fileName,
         uploadedAt: existingResume.uploadedAt.toISOString(),
-        analysis: {
-          primary_roles: existingResume.extractedData.primary_roles,
-          skills: existingResume.extractedData.skills,
-          job_keywords: existingResume.extractedData.job_keywords,
-          experience_level: existingResume.extractedData.experience_level,
-          experience_years: existingResume.extractedData.experience_years,
-          programming_languages: existingResume.extractedData.programming_languages,
-          frameworks: existingResume.extractedData.frameworks,
-          tools: existingResume.extractedData.tools,
-          summary: existingResume.extractedData.summary,
-          education: existingResume.extractedData.education.map(e => `${e.degree}, ${e.college}, ${e.year}`),
-        },
+        analysis: analysisData,  // Use fresh analysis
         resumeFullText: resumeText,
         _id: existingResume._id
       };
@@ -246,7 +270,7 @@ const getMatchingJobsEmbedding = async (req, res) => {
 
     console.log("📋 [Embedding] Enriching jobs with detailed highlights...");
     const enrichedJobs = await enrichJobsWithDetails(allJobs, {
-      batchSize: 10,
+      batchSize: 20,
       delayMs: 200
     });
 
@@ -260,7 +284,7 @@ const getMatchingJobsEmbedding = async (req, res) => {
       {
         topN: 120,
         threshold: 40, // Minimum final score threshold (40% = reasonable match)
-        batchSize: 20
+        batchSize: 40
       }
     );
 
