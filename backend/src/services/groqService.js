@@ -9,7 +9,7 @@ const analyzeResumeWithGroq = async (resumeText) => {
 {
   "primary_roles": ["exact job titles this person is targeting or has held"],
   "skills": ["skills explicitly listed in the resume"],
-  "job_keywords": ["3-4 job titles to search on job boards that match this person's actual domain. Examples: if DevOps resume → DevOps Engineer, Cloud Engineer, Site Reliability Engineer; if ML resume → Machine Learning Engineer, AI Engineer, Data Scientist; if Full Stack → Full Stack Developer, Software Engineer, Backend Developer. ONLY job titles, never technology or tool names."],
+  "job_keywords": ["3-4 job title VARIATIONS for job board searching based on the candidate's domain"],
   "experience_level": "Intern or Junior or Mid or Senior",
   "experience_years": <number>,
   "programming_languages": ["only if explicitly listed in resume, else empty array"],
@@ -22,18 +22,41 @@ const analyzeResumeWithGroq = async (resumeText) => {
 }
 
 CRITICAL RULES:
-- primary_roles: Extract ONLY the exact job titles written in the resume. Do NOT generate variations.
-- job_keywords: Generate 3-4 SIMILAR job titles for job board searching based on the domain. These should be related roles that match the candidate's skills and experience.
-  * If resume shows "DevOps Engineer" → ["DevOps Engineer", "Cloud Engineer", "Site Reliability Engineer", "Infrastructure Engineer"]
-  * If resume shows "Machine Learning Engineer" → ["Machine Learning Engineer", "AI Engineer", "Data Scientist", "ML Researcher"]
-  * If resume shows "Full Stack Developer" → ["Full Stack Developer", "Software Engineer", "Backend Developer", "Frontend Developer"]
-  * If resume shows "Network Engineer" → ["Network Engineer", "Network Administrator", "Systems Engineer", "Infrastructure Engineer"]
-  * IMPORTANT: job_keywords should reflect the ACTUAL domain. Never cross domains. A DevOps resume must never have ML titles.
-- experience_years: ONLY paid full-time/part-time work. Internships = 0.5 per 6 months. Education and personal projects = 0. No work experience = 0.
-- experience_level: Intern = 0 yrs, Junior = 0-2 yrs, Mid = 3-5 yrs, Senior = 5+ yrs
+
+1. primary_roles:
+   - Extract ONLY the exact job titles written in the resume.
+   - Do NOT generate variations here.
+
+2. job_keywords (MOST IMPORTANT FIELD):
+   - Generate exactly 3-4 ALTERNATIVE job titles for job board searching.
+   - These must be in the SAME domain as the candidate's primary role.
+   - Always include the primary role itself as the first entry.
+   - Then add 2-3 closely related titles a hiring manager would use for the same role.
+   - Domain examples:
+     * Full Stack Developer → ["Full Stack Developer", "Software Engineer", "Backend Developer", "Frontend Developer"]
+     * DevOps Engineer      → ["DevOps Engineer", "Cloud Engineer", "Site Reliability Engineer", "Infrastructure Engineer"]
+     * Machine Learning Engineer → ["Machine Learning Engineer", "AI Engineer", "Data Scientist", "ML Engineer"]
+     * Data Analyst         → ["Data Analyst", "Business Analyst", "Data Engineer", "Reporting Analyst"]
+     * Network Engineer     → ["Network Engineer", "Network Administrator", "Systems Engineer", "Infrastructure Engineer"]
+     * Android Developer    → ["Android Developer", "Mobile Developer", "Software Engineer", "Kotlin Developer"]
+     * UI/UX Designer       → ["UI/UX Designer", "Product Designer", "UX Researcher", "Interaction Designer"]
+   - NEVER mix domains. A DevOps resume must never have ML or design titles.
+   - ONLY job titles — never tools, frameworks, or technologies.
+
+3. experience_years:
+   - Count ONLY paid full-time or part-time work experience.
+   - Internships = 0.5 per 6 months.
+   - Education, personal projects, freelance (unless stated) = 0.
+   - No work experience at all = 0.
+
+4. experience_level:
+   - Intern  = 0 years
+   - Junior  = 0–2 years
+   - Mid     = 3–5 years
+   - Senior  = 5+ years
 
 Resume:
-${resumeText.substring(0, 4000)}`;
+${resumeText.substring(0, 15000)}`;
 
   const response = await groq.chat.completions.create({
     messages: [{ role: "user", content: prompt }],

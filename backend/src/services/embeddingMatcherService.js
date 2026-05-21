@@ -438,6 +438,97 @@ const calculateExperienceScore = (candidateYears, requiredYears) => {
 };
 
 /**
+ * Check if job requires US citizenship, green card, or security clearance
+ * MUST DISCARD jobs with these requirements
+ * @param {object} job - Job object
+ * @returns {object} - {hasRestriction: boolean, restrictionType: string, confidence: string}
+ */
+const checkCitizenshipRestrictions = (job) => {
+  // Combine all text sources for analysis
+  const jobDesc = (job.job_description || '').toLowerCase();
+  const jobTitle = (job.job_title || '').toLowerCase();
+
+  let qualText = '';
+  if (job.job_highlights?.Qualifications) {
+    qualText = job.job_highlights.Qualifications.join(' ').toLowerCase();
+  }
+
+  let respText = '';
+  if (job.job_highlights?.Responsibilities) {
+    respText = job.job_highlights.Responsibilities.join(' ').toLowerCase();
+  }
+
+  // Combine all text for comprehensive analysis
+  const combinedText = `${jobTitle} ${jobDesc} ${qualText} ${respText}`;
+
+  // Pattern 1: US Citizenship required
+  const usCitizenPatterns = [
+    /\b(us|u\.s\.|united states)\s+(citizen|citizenship)\s+(required|must|mandatory|only)/i,
+    /\b(must|required to|need to)\s+be\s+(a\s+)?(us|u\.s\.|united states)\s+citizen/i,
+    /\b(only\s+)?(us|u\.s\.|united states)\s+citizens?\s+(may|can|will be|are eligible)/i,
+    /\bcitizenship\s*:\s*(us|u\.s\.|united states)\s+(required|only)/i,
+    /\b(us|u\.s\.|united states)\s+citizenship\s+is\s+(required|mandatory|necessary)/i
+  ];
+
+  for (const pattern of usCitizenPatterns) {
+    if (pattern.test(combinedText)) {
+      console.log(`   🚫 DISCARD: US Citizenship required - "${combinedText.match(pattern)[0]}"`);
+      return { hasRestriction: true, restrictionType: 'US Citizenship', confidence: 'high' };
+    }
+  }
+
+  // Pattern 2: Green Card required
+  const greenCardPatterns = [
+    /\b(green\s*card|permanent\s+resident|lawful\s+permanent\s+resident)\s+(required|must|mandatory|only)/i,
+    /\b(must|required to|need to)\s+(have|hold|possess)\s+(a\s+)?(green\s*card|permanent\s+resident)/i,
+    /\b(only\s+)?(green\s*card|permanent\s+resident)s?\s+(may|can|will be|are eligible)/i,
+    /\bwork\s+authorization\s*:\s*(green\s*card|permanent\s+resident)\s+(required|only)/i
+  ];
+
+  for (const pattern of greenCardPatterns) {
+    if (pattern.test(combinedText)) {
+      console.log(`   🚫 DISCARD: Green Card required - "${combinedText.match(pattern)[0]}"`);
+      return { hasRestriction: true, restrictionType: 'Green Card', confidence: 'high' };
+    }
+  }
+
+  // Pattern 3: Security Clearance required
+  const clearancePatterns = [
+    /\b(security\s+clearance|clearance|secret\s+clearance|top\s+secret)\s+(required|must|mandatory|needed)/i,
+    /\b(must|required to|need to)\s+(have|hold|obtain|possess)\s+(a\s+)?(security\s+clearance|clearance)/i,
+    /\b(active|current|valid)\s+(security\s+clearance|clearance|secret|top\s+secret)/i,
+    /\bclearance\s+(level|type)\s*:\s*(secret|top\s+secret|ts\/sci|confidential)/i,
+    /\bts\/sci\s+(required|clearance|eligible)/i,
+    /\b(secret|top\s+secret|confidential)\s+security\s+clearance/i
+  ];
+
+  for (const pattern of clearancePatterns) {
+    if (pattern.test(combinedText)) {
+      console.log(`   🚫 DISCARD: Security Clearance required - "${combinedText.match(pattern)[0]}"`);
+      return { hasRestriction: true, restrictionType: 'Security Clearance', confidence: 'high' };
+    }
+  }
+
+  // Pattern 4: DoD Contractor / Government Contractor
+  const dodPatterns = [
+    /\b(dod|department\s+of\s+defense)\s+(contractor|contract|clearance)/i,
+    /\b(government|federal)\s+contractor\s+(required|must|only)/i,
+    /\b(must|required to)\s+be\s+(a\s+)?(dod|government|federal)\s+contractor/i,
+    /\bdod\s+(secret|top\s+secret|clearance)/i
+  ];
+
+  for (const pattern of dodPatterns) {
+    if (pattern.test(combinedText)) {
+      console.log(`   🚫 DISCARD: DoD/Government Contractor required - "${combinedText.match(pattern)[0]}"`);
+      return { hasRestriction: true, restrictionType: 'DoD Contractor', confidence: 'high' };
+    }
+  }
+
+  // No restrictions found
+  return { hasRestriction: false, restrictionType: null, confidence: 'none' };
+};
+
+/**
  * Check if candidate experience matches job requirement
  * RULE: Show jobs from 0 to (candidate_exp + 1)
  * @param {number} candidateYears - Candidate's years of experience
@@ -483,7 +574,7 @@ const matchJobsWithEmbeddings = async (resumeText, jobs, resumeAnalysis, options
   } = options;
 
   console.log(`⚡ [Embedding Matcher] Starting embedding-based matching for ${jobs.length} jobs`);
-  console.log(`📋 [Embedding Matcher] Filters: Experience match ONLY (no skills filter)`);
+  console.log(`📋 [Embedding Matcher] Filters: Experience match + Citizenship restrictions`);
   console.log(`🎯 [Embedding Matcher] Scoring: Coverage (25%) + Semantic Similarity (75%)`);
   console.log(`📊 [Embedding Matcher] Coverage = commonKeywords / jdKeywords`);
   console.log(`📊 [Embedding Matcher] Semantic  = cosine(resumeKeywordEmbedding, jdKeywordEmbedding)`);
@@ -521,14 +612,19 @@ const matchJobsWithEmbeddings = async (resumeText, jobs, resumeAnalysis, options
     console.log(`Resume: [${resumeTechKeywords.join(', ')}]`);
     console.log('='.repeat(80) + '\n');
 
-    // Step 3: PHASE 1 - Experience Filtering ONLY (before embeddings)
-    console.log('🔍 [Phase 1] Filtering by experience (0 to candidate+1 years)...');
+    // Step 3: PHASE 1 - Experience + Citizenship Filtering (before embeddings)
+    console.log('🔍 [Phase 1] Filtering by experience (0 to candidate+1 years) + citizenship restrictions...');
     console.log(`   📊 Showing jobs: 0-${resumeYears + 1} years (candidate has ${resumeYears} years)`);
+    console.log(`   🚫 Discarding: US Citizen, Green Card, Security Clearance, DoD Contractor requirements`);
 
     const phase1Jobs = jobs.map((job, index) => {
       const jobExp = extractJobExperience(job);
       const preprocessedJob = preprocessJobDescription(job);
       const expMatch = isExperienceMatch(resumeYears, jobExp);
+      
+      // Check for citizenship/clearance restrictions
+      const restrictionCheck = checkCitizenshipRestrictions(job);
+      const noRestrictions = !restrictionCheck.hasRestriction;
 
       // Log first 3 jobs' preprocessed text for verification
       if (index < 3) {
@@ -538,6 +634,7 @@ const matchJobsWithEmbeddings = async (resumeText, jobs, resumeAnalysis, options
         console.log(`Company: ${job.employer_name}`);
         console.log(`Experience Required: ${jobExp.minYears}-${jobExp.maxYears} years`);
         console.log(`Experience Match: ${expMatch ? '✅ YES' : '❌ NO'}`);
+        console.log(`Citizenship Check: ${noRestrictions ? '✅ NO RESTRICTIONS' : `🚫 RESTRICTED (${restrictionCheck.restrictionType})`}`);
         console.log('='.repeat(80));
 
         // Extract and log technical keywords from job
@@ -563,7 +660,9 @@ const matchJobsWithEmbeddings = async (resumeText, jobs, resumeAnalysis, options
         preprocessedText: preprocessedJob,
         expMatch,
         jobExp,
-        passedPhase1: expMatch  // Only experience filter
+        noRestrictions,
+        restrictionCheck,
+        passedPhase1: expMatch && noRestrictions  // Both experience AND no restrictions
       };
     });
 
@@ -575,11 +674,25 @@ const matchJobsWithEmbeddings = async (resumeText, jobs, resumeAnalysis, options
     });
     console.log('   📊 Experience distribution:', expDistribution);
 
+    // Debug: Show restriction statistics
+    const restrictionStats = {
+      noRestrictions: phase1Jobs.filter(item => item.noRestrictions).length,
+      usCitizen: phase1Jobs.filter(item => item.restrictionCheck.restrictionType === 'US Citizenship').length,
+      greenCard: phase1Jobs.filter(item => item.restrictionCheck.restrictionType === 'Green Card').length,
+      clearance: phase1Jobs.filter(item => item.restrictionCheck.restrictionType === 'Security Clearance').length,
+      dod: phase1Jobs.filter(item => item.restrictionCheck.restrictionType === 'DoD Contractor').length
+    };
+    console.log('   🚫 Restriction statistics:', restrictionStats);
+
     const phase1Passed = phase1Jobs.filter(item => item.passedPhase1);
-    const phase1Failed = phase1Jobs.filter(item => !item.passedPhase1);
+    const phase1FailedExp = phase1Jobs.filter(item => !item.expMatch && item.noRestrictions);
+    const phase1FailedRestriction = phase1Jobs.filter(item => item.expMatch && !item.noRestrictions);
+    const phase1FailedBoth = phase1Jobs.filter(item => !item.expMatch && !item.noRestrictions);
 
     console.log(`   ✅ Passed Phase 1: ${phase1Passed.length} jobs`);
-    console.log(`   ❌ Failed Phase 1: ${phase1Failed.length} jobs (experience mismatch)`);
+    console.log(`   ❌ Failed (experience): ${phase1FailedExp.length} jobs`);
+    console.log(`   ❌ Failed (restrictions): ${phase1FailedRestriction.length} jobs`);
+    console.log(`   ❌ Failed (both): ${phase1FailedBoth.length} jobs`);
 
     if (phase1Passed.length === 0) {
       console.log('⚠️ [Embedding Matcher] No jobs passed Phase 1 filters');
@@ -753,5 +866,6 @@ module.exports = {
   isExperienceMatch,
   calculateExperienceScore,
   extractTechnicalKeywords,
-  findCommonKeywords
+  findCommonKeywords,
+  checkCitizenshipRestrictions
 };
