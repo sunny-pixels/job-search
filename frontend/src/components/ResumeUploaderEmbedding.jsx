@@ -167,6 +167,19 @@ export default function ResumeUploaderEmbedding() {
     if (showLoader) setLoadingJobs(true);
     try {
       const res = await fetch(`${API_URL}/api/embedding-matcher/jobs?resumeId=${resumeId}&page=${page}&limit=12`);
+      
+      // Check for rate limit error
+      if (res.status === 429) {
+        const errorData = await res.json();
+        setMessage({ 
+          text: "⚠️ RapidAPI rate limit exceeded. Please try again in a few hours.", 
+          type: "error" 
+        });
+        setJobs([]);
+        setPagination(null);
+        return;
+      }
+      
       if (!res.ok) throw new Error(`Status: ${res.status}`);
       const data = await res.json();
 
@@ -182,11 +195,25 @@ export default function ResumeUploaderEmbedding() {
       if (entry.jobs.length) setTimeout(() => document.getElementById("jobs-anchor")?.scrollIntoView({ behavior: "smooth" }), 100);
       setTimeout(() => prefetchPage(page + 1), 300);
       setTimeout(() => prefetchPage(page - 1), 600);
-    } catch (err) { console.error(err); }
+    } catch (err) { 
+      console.error(err);
+      if (err.message.includes('429')) {
+        setMessage({ 
+          text: "⚠️ RapidAPI rate limit exceeded. Please try again later.", 
+          type: "error" 
+        });
+      }
+    }
     finally { if (showLoader) setLoadingJobs(false); }
   }, [resumeId, prefetchPage]);
 
-  const fetchMatchingJobs = useCallback(async (page = 1) => {
+  const fetchMatchingJobs = useCallback(async (page = 1, explicitResumeId = null) => {
+    const idToUse = explicitResumeId || resumeId;
+    if (!idToUse) {
+      console.error('❌ No resumeId available for fetching jobs');
+      return;
+    }
+    
     pageCache.current = {};
     prefetchingPages.current.clear();
     setLoadingJobs(true);
@@ -206,6 +233,14 @@ export default function ResumeUploaderEmbedding() {
     try {
       await showPage(page, false);
       if (resumeId) checkAppliedStatus();
+    } catch (error) {
+      // Check if it's a rate limit error
+      if (error.message && error.message.includes('429')) {
+        setMessage({ 
+          text: "⚠️ RapidAPI rate limit exceeded. Please try again in a few hours or contact support.", 
+          type: "error" 
+        });
+      }
     } finally {
       clearInterval(progressInterval);
       setLoadingJobs(false);
@@ -242,7 +277,7 @@ export default function ResumeUploaderEmbedding() {
       setAnalysis(data.analysis);
       setResumeId(data._id);
       setSavedFileName(file.name);
-      fetchMatchingJobs();
+      fetchMatchingJobs(1, data._id); // ← Pass resumeId directly!
       triggerResumeUpload();
     } catch (err) {
       setMessage({ text: `Upload failed: ${err.message}`, type: "error" });

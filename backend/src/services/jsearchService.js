@@ -56,6 +56,11 @@ const searchJobs = async (query, options = {}) => {
     if (error.response) {
       console.error(`   Status: ${error.response.status}`);
       console.error(`   Data:`, error.response.data);
+      
+      // Check for rate limit error (429 or 403)
+      if (error.response.status === 429 || error.response.status === 403) {
+        throw new Error('RATE_LIMIT_EXCEEDED');
+      }
     }
     return [];
   }

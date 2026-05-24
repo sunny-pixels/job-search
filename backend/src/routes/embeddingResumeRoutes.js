@@ -9,6 +9,7 @@ const {
   uploadResumeEmbedding,
   getMatchingJobsEmbedding,
   getJobProgressEmbedding,
+  clearSessionData,
   getAllResumes,
   downloadResume
 } = require("../controllers/embeddingResumeController");
@@ -36,6 +37,7 @@ const upload = multer({
 router.post("/upload", upload.single("resume"), uploadResumeEmbedding);
 router.get("/jobs", getMatchingJobsEmbedding);
 router.get("/jobs/progress", getJobProgressEmbedding);
+router.post("/clear-session", clearSessionData);
 router.get("/all", getAllResumes);
 router.get("/download/:id", downloadResume);
 router.get("/rate-limit", (req, res) => {
