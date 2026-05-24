@@ -1,43 +1,67 @@
 /**
  * Embedding Client Service
- * Communicates with Python embedding microservice
+ * Uses Hugging Face Inference Providers API for embeddings
+ * Model: ibm-granite/granite-embedding-97m-multilingual-r2
  */
 
 const axios = require('axios');
 const config = require('../config/config');
 
-const EMBEDDING_SERVICE_URL = config.EMBEDDING_SERVICE_URL || 'http://localhost:5001';
+// Use Hugging Face Inference Providers API (router endpoint)
+// Using granite-embedding model which is available on HF Inference provider
+const HF_API_URL = 'https://router.huggingface.co/hf-inference/models/ibm-granite/granite-embedding-97m-multilingual-r2';
+const HF_TOKEN = config.HUGGINGFACE_TOKEN;
+
+if (!HF_TOKEN) {
+  console.warn('⚠️ [Embedding Client] HUGGINGFACE_TOKEN not set in environment variables');
+}
 
 /**
- * Generate embedding for a single text
+ * Generate embedding for a single text using Hugging Face API
  * @param {string} text - Text to embed
  * @returns {Promise<Array<number>>} - Embedding vector
  */
 const generateEmbedding = async (text) => {
   try {
-    const response = await axios.post(`${EMBEDDING_SERVICE_URL}/embed`, {
-      text: text
-    }, {
-      timeout: 10000 // 10 second timeout
-    });
-
-    if (response.data && response.data.embedding) {
-      return response.data.embedding;
+    if (!HF_TOKEN) {
+      throw new Error('HUGGINGFACE_TOKEN not configured');
     }
 
-    throw new Error('Invalid response from embedding service');
+    const response = await axios.post(
+      HF_API_URL,
+      { inputs: text },
+      {
+        headers: {
+          'Authorization': `Bearer ${HF_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 15000 // 15 second timeout
+      }
+    );
+
+    // Hugging Face returns the embedding directly as an array
+    if (Array.isArray(response.data) && response.data.length > 0) {
+      return response.data;
+    }
+
+    throw new Error('Invalid response from Hugging Face API');
   } catch (error) {
     console.error('[Embedding Client] Error generating embedding:', error.message);
     if (error.response) {
       console.error('[Embedding Client] Response status:', error.response.status);
       console.error('[Embedding Client] Response data:', error.response.data);
+      
+      // Handle model loading state
+      if (error.response.status === 503 && error.response.data?.error?.includes('loading')) {
+        throw new Error('Model is loading, please retry in a few seconds');
+      }
     }
     throw new Error(`Failed to generate embedding: ${error.message}`);
   }
 };
 
 /**
- * Generate embeddings for multiple texts in batch
+ * Generate embeddings for multiple texts in batch using Hugging Face API
  * @param {Array<string>} texts - Array of texts to embed
  * @returns {Promise<Array<Array<number>>>} - Array of embedding vectors
  */
@@ -47,39 +71,76 @@ const generateBatchEmbeddings = async (texts) => {
       throw new Error('Texts must be a non-empty array');
     }
 
-    const response = await axios.post(`${EMBEDDING_SERVICE_URL}/embed/batch`, {
-      texts: texts
-    }, {
-      timeout: 30000 // 30 second timeout for batch
-    });
-
-    if (response.data && response.data.embeddings) {
-      return response.data.embeddings;
+    if (!HF_TOKEN) {
+      throw new Error('HUGGINGFACE_TOKEN not configured');
     }
 
-    throw new Error('Invalid response from embedding service');
+    // HF API supports batch processing with array of inputs
+    const response = await axios.post(
+      HF_API_URL,
+      { inputs: texts },
+      {
+        headers: {
+          'Authorization': `Bearer ${HF_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 60000 // 60 second timeout for batch
+      }
+    );
+
+    // Response is array of embeddings
+    if (Array.isArray(response.data) && response.data.length > 0) {
+      return response.data;
+    }
+
+    throw new Error('Invalid response from Hugging Face API');
   } catch (error) {
     console.error('[Embedding Client] Error generating batch embeddings:', error.message);
     if (error.response) {
       console.error('[Embedding Client] Response status:', error.response.status);
       console.error('[Embedding Client] Response data:', error.response.data);
+      
+      // Handle model loading state
+      if (error.response.status === 503 && error.response.data?.error?.includes('loading')) {
+        throw new Error('Model is loading, please retry in a few seconds');
+      }
     }
     throw new Error(`Failed to generate batch embeddings: ${error.message}`);
   }
 };
 
 /**
- * Check if embedding service is available
+ * Check if Hugging Face API is available
  * @returns {Promise<boolean>} - True if service is available
  */
 const checkServiceHealth = async () => {
   try {
-    const response = await axios.get(`${EMBEDDING_SERVICE_URL}/health`, {
-      timeout: 5000
-    });
-    return response.status === 200;
+    if (!HF_TOKEN) {
+      console.error('[Embedding Client] HUGGINGFACE_TOKEN not configured');
+      return false;
+    }
+
+    // Test with a simple text
+    const response = await axios.post(
+      HF_API_URL,
+      { inputs: 'test' },
+      {
+        headers: {
+          'Authorization': `Bearer ${HF_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 10000
+      }
+    );
+    
+    return response.status === 200 && Array.isArray(response.data);
   } catch (error) {
-    console.error('[Embedding Client] Embedding service health check failed:', error.message);
+    // Model loading is considered "available" - just needs time
+    if (error.response?.status === 503 && error.response?.data?.error?.includes('loading')) {
+      console.log('[Embedding Client] Model is loading, service is available');
+      return true;
+    }
+    console.error('[Embedding Client] Health check failed:', error.message);
     return false;
   }
 };
