@@ -316,7 +316,7 @@ const getMatchingJobsEmbedding = async (req, res) => {
     let allJobs;
     try {
       allJobs = await searchMultipleQueries(searchData.queries, {
-        num_pages: 1,
+        num_pages: 3,
         date_posted: 'week',
         country: 'us',
         job_requirements: searchData.requirements
