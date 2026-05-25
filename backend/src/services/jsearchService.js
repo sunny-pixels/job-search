@@ -109,8 +109,8 @@ const fetchJobDetails = async (jobId) => {
  */
 const enrichJobsWithDetails = async (jobs, options = {}) => {
   const {
-    batchSize = 10,
-    delayMs = 200
+    batchSize = 10,      // Default to 5 to respect rate limits (5 req/sec)
+    delayMs = 500      // Default to 1 second between batches
   } = options;
 
   console.log(`🔍 [JSearch] Enriching ${jobs.length} jobs with detailed information...`);
@@ -177,13 +177,76 @@ const enrichJobsWithDetails = async (jobs, options = {}) => {
 };
 
 /**
+ * Supported job platforms for filtering
+ */
+const SUPPORTED_PLATFORMS = ['linkedin', 'indeed', 'glassdoor', 'ziprecruiter'];
+
+/**
+ * Generate platform-specific queries using "via" keyword
+ * @param {string} baseQuery - Base search query (e.g., "software engineer in New York")
+ * @param {Array<string>} platforms - Array of platform names (default: all supported platforms)
+ * @returns {Array<string>} - Array of platform-specific queries
+ */
+const generatePlatformQueries = (baseQuery, platforms = SUPPORTED_PLATFORMS) => {
+  return platforms.map(platform => `${baseQuery} via ${platform}`);
+};
+
+/**
+ * Distribute job titles across platforms in round-robin fashion
+ * Each job title gets assigned to ONE platform to reduce API calls
+ * @param {Array<string>} queries - Array of job title queries
+ * @param {Array<string>} platforms - Array of platform names
+ * @returns {Array<string>} - Array of platform-specific queries (one per job title)
+ */
+const distributeQueriesAcrossPlatforms = (queries, platforms = SUPPORTED_PLATFORMS) => {
+  const distributedQueries = [];
+  
+  console.log(`🎯 [JSearch] Distributing ${queries.length} job titles across ${platforms.length} platforms (round-robin)`);
+  
+  queries.forEach((query, index) => {
+    // Round-robin: assign platform based on index
+    const platform = platforms[index % platforms.length];
+    const platformQuery = `${query} via ${platform}`;
+    distributedQueries.push(platformQuery);
+    
+    console.log(`   ${index + 1}. "${query}" → ${platform}`);
+  });
+  
+  return distributedQueries;
+};
+
+/**
  * Search jobs for multiple queries and combine results
  * @param {Array<string>} queries - Array of search queries
- * @param {object} options - Search options (can include job_requirements)
+ * @param {object} options - Search options (can include job_requirements, filterByPlatform, distributePlatforms)
  * @returns {Promise<Array>} - Combined array of unique jobs
  */
 const searchMultipleQueries = async (queries, options = {}) => {
-  console.log(`🚀 [JSearch] Searching ${queries.length} queries with ${options.num_pages || 1} pages each...`);
+  let finalQueries = queries;
+  
+  // Option 1: Distribute platforms (round-robin) - ONE platform per job title
+  if (options.distributePlatforms === true) {
+    const platforms = options.platforms || SUPPORTED_PLATFORMS;
+    finalQueries = distributeQueriesAcrossPlatforms(queries, platforms);
+  }
+  // Option 2: Filter by platforms (all platforms per job title) - MULTIPLE platforms per job title
+  else if (options.filterByPlatform === true) {
+    finalQueries = [];
+    const platforms = options.platforms || SUPPORTED_PLATFORMS;
+    
+    console.log(`🎯 [JSearch] Filtering jobs by platforms: ${platforms.join(', ')}`);
+    
+    for (const query of queries) {
+      const platformQueries = generatePlatformQueries(query, platforms);
+      finalQueries.push(...platformQueries);
+    }
+  }
+  // Option 3: No platform filtering (default behavior)
+  else {
+    console.log(`🌐 [JSearch] Searching all platforms (no filtering)`);
+  }
+  
+  console.log(`🚀 [JSearch] Searching ${finalQueries.length} queries with ${options.num_pages || 1} pages each...`);
   if (options.job_requirements) {
     console.log(`   📋 With requirements filter: ${options.job_requirements}`);
   }
@@ -193,7 +256,7 @@ const searchMultipleQueries = async (queries, options = {}) => {
   let totalFetched = 0;
   let duplicatesRemoved = 0;
 
-  for (const query of queries) {
+  for (const query of finalQueries) {
     const jobs = await searchJobs(query, options);
     totalFetched += jobs.length;
     
@@ -305,5 +368,8 @@ module.exports = {
   buildSearchQueries,
   normalizeSearchTerm,
   fetchJobDetails,
-  enrichJobsWithDetails
+  enrichJobsWithDetails,
+  generatePlatformQueries,
+  distributeQueriesAcrossPlatforms,
+  SUPPORTED_PLATFORMS
 };

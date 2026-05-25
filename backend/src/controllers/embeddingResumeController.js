@@ -319,7 +319,8 @@ const getMatchingJobsEmbedding = async (req, res) => {
         num_pages: 3,
         date_posted: 'week',
         country: 'us',
-        job_requirements: searchData.requirements
+        job_requirements: searchData.requirements,
+        distributePlatforms: true  // ← Enable round-robin platform distribution (1 platform per job title)
       });
     } catch (error) {
       if (error.message === 'RATE_LIMIT_EXCEEDED') {
@@ -349,8 +350,8 @@ const getMatchingJobsEmbedding = async (req, res) => {
 
     console.log("📋 [Embedding] Enriching jobs with detailed highlights...");
     const enrichedJobs = await enrichJobsWithDetails(allJobs, {
-      batchSize: 20,
-      delayMs: 200
+      batchSize: 5,      // Reduced from 20 to match 5 req/sec rate limit
+      delayMs: 1000      // Increased from 200ms to 1000ms (1 second between batches)
     });
 
     session.jobFetchProgress = { status: 'matching', message: 'Computing embedding similarities...', progress: 70 };
