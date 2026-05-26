@@ -316,11 +316,11 @@ const getMatchingJobsEmbedding = async (req, res) => {
     let allJobs;
     try {
       allJobs = await searchMultipleQueries(searchData.queries, {
-        num_pages: 3,
+        num_pages: 2,
         date_posted: 'week',
         country: 'us',
         job_requirements: searchData.requirements,
-        distributePlatforms: true  // ← Enable round-robin platform distribution (1 platform per job title)
+        filterByPlatform: true  // ← Search ALL platforms for EACH job title
       });
     } catch (error) {
       if (error.message === 'RATE_LIMIT_EXCEEDED') {
