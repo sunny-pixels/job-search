@@ -14,3 +14,71 @@ current best -> test-current-system.js
 now main test file -> test-keyword-only-similarity.js
 
 hugging-face=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
+
+
+**STEP 2 — HARD FILTER CHECK**
+Check these binary disqualifiers BEFORE scoring. Each applies a flat penalty to the FINAL score.
+
+- Location mismatch (role is on-site/hybrid at specific city, candidate is elsewhere with no relocation signal): -10 pts
+- Years of experience shortfall (candidate has less than minimum required years): -5 pts per year gap, max -15
+- Missing mandatory credential (e.g. required license, certification explicitly stated as required): -10 pts each
+- Visa/authorization mismatch (if detectable): -15 pts
+
+Note which hard filters fired and the total deduction.
+
+---
+
+
+  const prompt = `You are a strict resume parser. Extract ONLY what is explicitly written in the resume. Do NOT infer or assume. Return ONLY a valid JSON object, no markdown, no explanation.
+
+{
+  "primary_roles": ["exact job titles this person is targeting or has held"],
+  "skills": ["skills explicitly listed in the resume"],
+  "job_keywords": ["3-4 job title VARIATIONS for job board searching based on the candidate's domain"],
+  "experience_level": "Intern or Junior or Mid or Senior",
+  "experience_years": <number>,
+  "programming_languages": ["only if explicitly listed in resume, else empty array"],
+  "frameworks": ["only if explicitly listed in resume, else empty array"],
+  "tools": ["tools explicitly mentioned in resume"],
+  "summary": "2-3 sentence summary based only on resume content",
+  "education": ["Degree, Institution as a single string per entry"],
+  "projects": ["project names or types mentioned"],
+  "internships": ["internship company or role if explicitly mentioned"]
+}
+
+CRITICAL RULES:
+
+1. primary_roles:
+   - Extract ONLY the exact job titles written in the resume.
+   - Do NOT generate variations here.
+
+2. job_keywords (MOST IMPORTANT FIELD):
+   - Generate exactly 3-4 ALTERNATIVE job titles for job board searching.
+   - These must be in the SAME domain as the candidate's primary role.
+   - Always include the primary role itself as the first entry.
+   - Then add 2-3 closely related titles a hiring manager would use for the same role.
+   - Domain examples:
+     * Full Stack Developer → ["Full Stack Developer", "Software Engineer", "Backend Developer", "Frontend Developer"]
+     * DevOps Engineer      → ["DevOps Engineer", "Cloud Engineer", "Site Reliability Engineer", "Infrastructure Engineer"]
+     * Machine Learning Engineer → ["Machine Learning Engineer", "AI Engineer", "Data Scientist", "ML Engineer"]
+     * Data Analyst         → ["Data Analyst", "Business Analyst", "Data Engineer", "Reporting Analyst"]
+     * Network Engineer     → ["Network Engineer", "Network Administrator", "Systems Engineer", "Infrastructure Engineer"]
+     * Android Developer    → ["Android Developer", "Mobile Developer", "Software Engineer", "Kotlin Developer"]
+     * UI/UX Designer       → ["UI/UX Designer", "Product Designer", "UX Researcher", "Interaction Designer"]
+   - NEVER mix domains. A DevOps resume must never have ML or design titles.
+   - ONLY job titles — never tools, frameworks, or technologies.
+
+3. experience_years:
+   - Count ONLY paid full-time or part-time work experience.
+   - Internships = 0.5 per 6 months.
+   - Education, personal projects, freelance (unless stated) = 0.
+   - No work experience at all = 0.
+
+4. experience_level:
+   - Intern  = 0 years
+   - Junior  = 0–2 years
+   - Mid     = 3–5 years
+   - Senior  = 5+ years
+
+Resume:
+${resumeText.substring(0, 15000)}`;

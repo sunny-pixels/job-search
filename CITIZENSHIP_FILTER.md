@@ -30,9 +30,12 @@ Analyzes job descriptions, titles, and qualifications to detect restricted requi
 #### 3. **Security Clearance Required**
 - "Security clearance required"
 - "Active Secret clearance"
+- "Active US Security clearance"
 - "Top Secret clearance needed"
 - "TS/SCI clearance"
 - "Must obtain clearance"
+- "with Security Clearance" (in job title)
+- "Clearance holder"
 
 #### 4. **DoD Contractor**
 - "DoD contractor required"

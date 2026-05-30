@@ -6,8 +6,7 @@
 const { extractTextFromPDF, extractTextFromFile } = require("../services/pdfService");
 const { analyzeResumeWithGroq } = require("../services/groqService");
 const { searchMultipleQueries, buildSearchQueries, enrichJobsWithDetails } = require("../services/jsearchService");
-const { matchJobsWithEmbeddings } = require("../services/embeddingMatcherService");
-const { checkServiceHealth } = require("../services/embeddingClient");
+const { filterJobsByExperienceAndCitizenship } = require("../services/embeddingMatcherService");
 const { saveFile } = require("../services/fileStorageService");
 const Resume = require("../models/Resume");
 const crypto = require("crypto");
@@ -87,38 +86,29 @@ const uploadResumeEmbedding = async (req, res) => {
     
     if (!req.file) return res.status(400).json({ message: "No file uploaded" });
 
-    // Check if embedding service is available
-    const serviceAvailable = await checkServiceHealth();
-    if (!serviceAvailable) {
-      return res.status(503).json({ 
-        message: "Embedding service is unavailable. Please try again later or use AI-based matching.",
-        error: "EMBEDDING_SERVICE_DOWN"
-      });
-    }
-
     // Generate file hash
     const fileHash = crypto.createHash('sha256').update(req.file.buffer).digest('hex');
-    console.log(`🔑 [Embedding] File hash: ${fileHash} (Session: ${sessionId})`);
+    console.log(`🔑 [Filter] File hash: ${fileHash} (Session: ${sessionId})`);
 
     // Check for duplicate
     const existingResume = await Resume.findOne({ fileHash });
     if (existingResume) {
-      console.log(`⚠️ [Embedding] Duplicate detected: ${existingResume._id} (Session: ${sessionId})`);
+      console.log(`⚠️ [Filter] Duplicate detected: ${existingResume._id} (Session: ${sessionId})`);
       
       // Determine new file type
       const newFileType = req.file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ? 'docx' : 'pdf';
       
       // Extract text from the NEW upload
-      console.log(`📄 [Embedding] Extracting text from new ${newFileType.toUpperCase()} upload...`);
+      console.log(`📄 [Filter] Extracting text from new ${newFileType.toUpperCase()} upload...`);
       const resumeText = await extractTextFromFile(req.file.buffer, newFileType);
       
       // ALWAYS re-analyze with Groq to get latest parsing logic
-      console.log("🔄 [Embedding] Re-analyzing resume with latest Groq logic...");
+      console.log("🔄 [Filter] Re-analyzing resume with latest Groq logic...");
       const analysisData = await analyzeResumeWithGroq(resumeText);
       
       // If uploading DOCX (regardless of what existed before), save it
       if (newFileType === 'docx') {
-        console.log("📄 [Embedding] Saving DOCX file for format preservation...");
+        console.log("📄 [Filter] Saving DOCX file for format preservation...");
         const { fileUrl, fileName, fileType } = await saveFile(req.file.buffer, req.file.originalname);
         
         // Update database with new file info AND new analysis
@@ -136,7 +126,7 @@ const uploadResumeEmbedding = async (req, res) => {
         existingResume.extractedData.tools = analysisData.tools;
         existingResume.extractedData.summary = analysisData.summary;
         await existingResume.save();
-        console.log("✅ [Embedding] Updated to DOCX file with fresh analysis");
+        console.log("✅ [Filter] Updated to DOCX file with fresh analysis");
       } else if (!existingResume.extractedData.resumeFullText || existingResume.extractedData.resumeFullText.trim().length === 0) {
         // For PDF, update text and analysis if missing
         existingResume.extractedData.resumeFullText = resumeText;
@@ -150,7 +140,7 @@ const uploadResumeEmbedding = async (req, res) => {
         existingResume.extractedData.tools = analysisData.tools;
         existingResume.extractedData.summary = analysisData.summary;
         await existingResume.save();
-        console.log("✅ [Embedding] Updated resume text with fresh analysis");
+        console.log("✅ [Filter] Updated resume text with fresh analysis");
       } else {
         // Just update the analysis data (keep existing file)
         existingResume.extractedData.primary_roles = analysisData.primary_roles;
@@ -163,7 +153,7 @@ const uploadResumeEmbedding = async (req, res) => {
         existingResume.extractedData.tools = analysisData.tools;
         existingResume.extractedData.summary = analysisData.summary;
         await existingResume.save();
-        console.log("✅ [Embedding] Updated analysis with latest Groq logic");
+        console.log("✅ [Filter] Updated analysis with latest Groq logic");
       }
       
       session.lastAnalyzedResume = {
@@ -181,23 +171,23 @@ const uploadResumeEmbedding = async (req, res) => {
         _id: existingResume._id,
         analysis: session.lastAnalyzedResume.analysis,
         duplicate: true,
-        matching_method: "embedding",
+        matching_method: "filtered",
         sessionId: sessionId
       });
     }
 
-    console.log("📄 [Embedding] Extracting text from file...");
+    console.log("📄 [Filter] Extracting text from file...");
     
     // Determine file type from mimetype
     const detectedFileType = req.file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ? 'docx' : 'pdf';
-    console.log(`📄 [Embedding] File type detected: ${detectedFileType.toUpperCase()}`);
+    console.log(`📄 [Filter] File type detected: ${detectedFileType.toUpperCase()}`);
     
     const resumeText = await extractTextFromFile(req.file.buffer, detectedFileType);
 
-    console.log("🤖 [Embedding] Analyzing resume with Groq...");
+    console.log("🤖 [Filter] Analyzing resume with Groq...");
     const analysisData = await analyzeResumeWithGroq(resumeText);
 
-    console.log("💾 [Embedding] Saving file...");
+    console.log("💾 [Filter] Saving file...");
     const { fileUrl, fileName, fileType } = await saveFile(req.file.buffer, req.file.originalname);
 
     // Extract name, email, phone
@@ -226,7 +216,7 @@ const uploadResumeEmbedding = async (req, res) => {
       };
     });
 
-    console.log("💾 [Embedding] Saving to MongoDB...");
+    console.log("💾 [Filter] Saving to MongoDB...");
     const resumeDoc = new Resume({
       fileUrl,
       fileName,
@@ -252,7 +242,7 @@ const uploadResumeEmbedding = async (req, res) => {
     });
 
     await resumeDoc.save();
-    console.log(`✅ [Embedding] Resume saved with ID: ${resumeDoc._id} (Session: ${sessionId})`);
+    console.log(`✅ [Filter] Resume saved with ID: ${resumeDoc._id} (Session: ${sessionId})`);
 
     session.cachedScoredJobs = null;
 
@@ -265,15 +255,15 @@ const uploadResumeEmbedding = async (req, res) => {
     };
 
     res.json({
-      message: "Resume uploaded successfully (Embedding mode)",
+      message: "Resume uploaded successfully (Filter mode)",
       _id: resumeDoc._id,
       analysis: analysisData,
-      matching_method: "embedding",
+      matching_method: "filtered",
       sessionId: sessionId
     });
 
   } catch (error) {
-    console.error("[Embedding] Upload error:", error.message);
+    console.error("[Filter] Upload error:", error.message);
     res.status(500).json({ message: "Error analyzing resume", error: error.message });
   }
 };
@@ -291,32 +281,23 @@ const getMatchingJobsEmbedding = async (req, res) => {
     }
 
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 12;
+    const limit = parseInt(req.query.limit) || 10;
 
     // Serve from cache if available
     if (session.cachedScoredJobs) {
-      console.log(`⚡ [Embedding] Serving page ${page} from cache (${session.cachedScoredJobs.length} jobs) - Session: ${sessionId}`);
+      console.log(`⚡ [Filter] Serving page ${page} from cache (${session.cachedScoredJobs.length} jobs) - Session: ${sessionId}`);
       return sendPaginatedResponseEmbedding(res, session.cachedScoredJobs, page, limit, sessionId);
-    }
-
-    // Check if embedding service is available
-    const serviceAvailable = await checkServiceHealth();
-    if (!serviceAvailable) {
-      return res.status(503).json({ 
-        message: "Embedding service is unavailable. Please try again later.",
-        error: "EMBEDDING_SERVICE_DOWN"
-      });
     }
 
     session.jobFetchProgress = { status: 'fetching', message: 'Searching jobs with JSearch API...', progress: 20 };
 
-    console.log(`🔍 [Embedding] Fetching jobs from JSearch API... (Session: ${sessionId})`);
+    console.log(`🔍 [Filter] Fetching jobs from JSearch API... (Session: ${sessionId})`);
     const searchData = buildSearchQueries(session.lastAnalyzedResume.analysis);
     
     let allJobs;
     try {
       allJobs = await searchMultipleQueries(searchData.queries, {
-        num_pages: 2,
+        num_pages: 1,
         date_posted: 'week',
         country: 'us',
         job_requirements: searchData.requirements,
@@ -334,53 +315,47 @@ const getMatchingJobsEmbedding = async (req, res) => {
       throw error;
     }
 
-    console.log(`📊 [Embedding] Found ${allJobs.length} jobs from JSearch (Session: ${sessionId})`);
+    console.log(`📊 [Filter] Found ${allJobs.length} jobs from JSearch (Session: ${sessionId})`);
 
     if (allJobs.length === 0) {
       return res.json({
         message: "No jobs found",
         jobs: [],
         pagination: { current_page: 1, total_pages: 0, total_jobs: 0 },
-        matching_method: "embedding",
+        matching_method: "filtered",
         sessionId: sessionId
       });
     }
 
     session.jobFetchProgress = { status: 'enriching', message: 'Enriching jobs with detailed information...', progress: 40 };
 
-    console.log("📋 [Embedding] Enriching jobs with detailed highlights...");
+    console.log("📋 [Filter] Enriching jobs with detailed highlights...");
     const enrichedJobs = await enrichJobsWithDetails(allJobs, {
-      batchSize: 5,      // Reduced from 20 to match 5 req/sec rate limit
-      delayMs: 1000      // Increased from 200ms to 1000ms (1 second between batches)
+      batchSize: 5,      // Respect 5 req/sec rate limit
+      delayMs: 1000      // 1 second between batches
     });
 
-    session.jobFetchProgress = { status: 'matching', message: 'Computing embedding similarities...', progress: 70 };
+    session.jobFetchProgress = { status: 'filtering', message: 'Filtering by experience and citizenship...', progress: 80 };
 
-    console.log("🧠 [Embedding] Matching jobs with embeddings...");
-    const scoredJobs = await matchJobsWithEmbeddings(
-      session.lastAnalyzedResume.resumeFullText,
+    console.log("🔍 [Filter] Filtering jobs by experience and citizenship...");
+    const filteredJobs = filterJobsByExperienceAndCitizenship(
       enrichedJobs,
-      session.lastAnalyzedResume.analysis,
-      {
-        topN: 120,
-        threshold: 40,
-        batchSize: 40
-      }
+      session.lastAnalyzedResume.analysis
     );
 
-    console.log(`✂️ [Embedding] Matched ${scoredJobs.length} jobs (Session: ${sessionId})`);
+    console.log(`✂️ [Filter] Filtered ${filteredJobs.length} jobs (Session: ${sessionId})`);
 
-    session.cachedScoredJobs = scoredJobs;
-    console.log(`💾 [Embedding] Cached ${scoredJobs.length} scored jobs (Session: ${sessionId})`);
+    session.cachedScoredJobs = filteredJobs;
+    console.log(`💾 [Filter] Cached ${filteredJobs.length} filtered jobs (Session: ${sessionId})`);
 
     session.jobFetchProgress = { status: 'complete', message: 'Complete', progress: 100 };
 
-    return sendPaginatedResponseEmbedding(res, scoredJobs, page, limit, sessionId);
+    return sendPaginatedResponseEmbedding(res, filteredJobs, page, limit, sessionId);
 
   } catch (error) {
     const sessionId = getSessionId(req);
     const session = getSession(sessionId);
-    console.error("[Embedding] Jobs error:", error.message);
+    console.error("[Filter] Jobs error:", error.message);
     session.jobFetchProgress = { status: 'error', message: error.message, progress: 0 };
     res.status(500).json({ message: "Error fetching jobs", error: error.message });
   }
@@ -407,26 +382,18 @@ const clearSessionData = (req, res) => {
 /**
  * Send paginated response
  */
-const sendPaginatedResponseEmbedding = (res, scoredJobs, page, limit, sessionId) => {
-  const totalJobs = scoredJobs.length;
+const sendPaginatedResponseEmbedding = (res, filteredJobs, page, limit, sessionId) => {
+  const totalJobs = filteredJobs.length;
   const totalPages = Math.ceil(totalJobs / limit);
   const startIndex = (page - 1) * limit;
-  const paginatedJobs = scoredJobs.slice(startIndex, startIndex + limit);
+  const paginatedJobs = filteredJobs.slice(startIndex, startIndex + limit);
 
   console.log(`📄 [Pagination] Page ${page}, Limit ${limit}, Start ${startIndex}, End ${startIndex + limit}`);
   console.log(`📄 [Pagination] Total jobs: ${totalJobs}, Returning: ${paginatedJobs.length} jobs`);
 
-  const scoreRanges = {
-    excellent: scoredJobs.filter(j => j.embedding_match_score >= 90).length,
-    great: scoredJobs.filter(j => j.embedding_match_score >= 80 && j.embedding_match_score < 90).length,
-    good: scoredJobs.filter(j => j.embedding_match_score >= 70 && j.embedding_match_score < 80).length,
-    fair: scoredJobs.filter(j => j.embedding_match_score >= 60 && j.embedding_match_score < 70).length,
-    low: scoredJobs.filter(j => j.embedding_match_score < 60).length
-  };
-
   res.json({
-    message: "Jobs retrieved successfully (Embedding-based)",
-    matching_method: "embedding",
+    message: "Jobs retrieved successfully (Filtered by experience + citizenship)",
+    matching_method: "filtered",
     cached: true,
     pagination: {
       current_page: page,
@@ -436,7 +403,6 @@ const sendPaginatedResponseEmbedding = (res, scoredJobs, page, limit, sessionId)
       has_next: page < totalPages,
       has_prev: page > 1
     },
-    score_distribution: scoreRanges,
     jobs: paginatedJobs,
     sessionId: sessionId
   });

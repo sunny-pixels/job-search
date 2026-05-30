@@ -144,10 +144,13 @@ const enrichJobsWithDetails = async (jobs, options = {}) => {
       const detailedJob = await fetchJobDetails(job.job_id);
       
       if (detailedJob && detailedJob.job_highlights) {
-        // Merge detailed highlights into original job
+        // Merge detailed highlights AND experience fields into original job
         const enrichedJob = {
           ...job,
-          job_highlights: detailedJob.job_highlights
+          job_highlights: detailedJob.job_highlights,
+          required_experience_years: detailedJob.required_experience_years || null,
+          seniority_level: detailedJob.seniority_level || null,
+          education_required: detailedJob.education_required || null
         };
         successCount++;
         return enrichedJob;

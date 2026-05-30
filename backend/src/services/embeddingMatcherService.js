@@ -222,10 +222,29 @@ const getExperienceLevel = (years) => {
 /**
  * Extract required experience years from job with improved parsing
  * Analyzes job description, qualifications, and responsibilities
+ * PRIORITY 1: Use required_experience_years from API (if available)
+ * PRIORITY 2: Parse from text (fallback)
  * @param {object} job - Job object
- * @returns {object} - {minYears, maxYears, level, confidence}
+ * @returns {object} - {minYears, maxYears, level, confidence, source}
  */
 const extractJobExperience = (job) => {
+  // PRIORITY 1: Use API field (most accurate)
+  if (job.required_experience_years !== null && job.required_experience_years !== undefined) {
+    const years = job.required_experience_years;
+    console.log(`   ✅ Using API field: ${years} years (required_experience_years)`);
+    
+    return {
+      minYears: years,
+      maxYears: years,
+      level: getExperienceLevel(years),
+      confidence: "high",
+      source: "api"
+    };
+  }
+  
+  // PRIORITY 2: Parse from text (fallback)
+  console.log(`   ⚠️ API field missing, parsing from text...`);
+  
   // Combine all text sources for analysis
   const jobDesc = (job.job_description || '').toLowerCase();
   const jobTitle = (job.job_title || '').toLowerCase();
@@ -496,10 +515,12 @@ const checkCitizenshipRestrictions = (job) => {
   const clearancePatterns = [
     /\b(security\s+clearance|clearance|secret\s+clearance|top\s+secret)\s+(required|must|mandatory|needed)/i,
     /\b(must|required to|need to)\s+(have|hold|obtain|possess)\s+(a\s+)?(security\s+clearance|clearance)/i,
-    /\b(active|current|valid)\s+(security\s+clearance|clearance|secret|top\s+secret)/i,
+    /\b(active|current|valid)\s+(us\s+)?(security\s+clearance|clearance|secret|top\s+secret)/i,  // ← UPDATED: Added (us\s+)? to handle "Active US Security clearance"
     /\bclearance\s+(level|type)\s*:\s*(secret|top\s+secret|ts\/sci|confidential)/i,
     /\bts\/sci\s+(required|clearance|eligible)/i,
-    /\b(secret|top\s+secret|confidential)\s+security\s+clearance/i
+    /\b(secret|top\s+secret|confidential)\s+security\s+clearance/i,
+    /\bwith\s+(security\s+clearance|clearance)/i,
+    /\b(security\s+clearance|clearance)\s+holder/i
   ];
 
   for (const pattern of clearancePatterns) {
@@ -855,8 +876,81 @@ const matchJobsWithEmbeddings = async (resumeText, jobs, resumeAnalysis, options
  */
 
 
+/**
+ * Filter jobs by experience and citizenship restrictions
+ * Does NOT generate embeddings or score jobs
+ * @param {Array<object>} jobs - Enriched jobs from JSearch API
+ * @param {object} resumeAnalysis - Parsed resume data from Groq
+ * @returns {Array<object>} - Filtered jobs (no scoring)
+ */
+const filterJobsByExperienceAndCitizenship = (jobs, resumeAnalysis) => {
+  console.log(`🔍 [Job Filter] Filtering ${jobs.length} jobs by experience + citizenship...`);
+  const startTime = Date.now();
+
+  const resumeYears = resumeAnalysis.experience_years || 0;
+  const resumeLevel = getExperienceLevel(resumeYears);
+
+  console.log(`   👤 Candidate: ${resumeYears} years (${resumeLevel})`);
+  console.log(`   📊 Showing jobs: 0-${resumeYears + 1} years (candidate has ${resumeYears} years)`);
+  console.log(`   🚫 Discarding: US Citizen, Green Card, Security Clearance, DoD Contractor requirements`);
+
+  const filteredJobs = [];
+  let expFailCount = 0;
+  let citizenshipFailCount = 0;
+  let bothFailCount = 0;
+
+  for (let i = 0; i < jobs.length; i++) {
+    const job = jobs[i];
+    
+    // Extract experience requirement
+    const jobExp = extractJobExperience(job);
+    const expMatch = isExperienceMatch(resumeYears, jobExp);
+    
+    // Check citizenship restrictions
+    const restrictionCheck = checkCitizenshipRestrictions(job);
+    const noRestrictions = !restrictionCheck.hasRestriction;
+
+    // Log first 3 jobs for debugging
+    if (i < 3) {
+      console.log(`\n   📋 [Job #${i + 1}] ${job.job_title}`);
+      console.log(`      Company: ${job.employer_name}`);
+      console.log(`      Required: ${jobExp.minYears}-${jobExp.maxYears} years (${jobExp.source || 'text'})`);
+      console.log(`      Experience Match: ${expMatch ? '✅ YES' : '❌ NO'}`);
+      console.log(`      Citizenship: ${noRestrictions ? '✅ NO RESTRICTIONS' : `🚫 ${restrictionCheck.restrictionType}`}`);
+    }
+
+    // Apply filters
+    if (expMatch && noRestrictions) {
+      filteredJobs.push({
+        ...job,
+        _filter_metadata: {
+          experience_match: true,
+          no_restrictions: true,
+          required_years: jobExp.minYears,
+          experience_source: jobExp.source || 'text'
+        }
+      });
+    } else {
+      if (!expMatch && !noRestrictions) bothFailCount++;
+      else if (!expMatch) expFailCount++;
+      else if (!noRestrictions) citizenshipFailCount++;
+    }
+  }
+
+  const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
+  
+  console.log(`\n✅ [Job Filter] Filtering complete in ${totalTime}s`);
+  console.log(`   ✅ Passed: ${filteredJobs.length} jobs`);
+  console.log(`   ❌ Failed (experience): ${expFailCount} jobs`);
+  console.log(`   ❌ Failed (citizenship): ${citizenshipFailCount} jobs`);
+  console.log(`   ❌ Failed (both): ${bothFailCount} jobs`);
+
+  return filteredJobs;
+};
+
 module.exports = {
   matchJobsWithEmbeddings,
+  filterJobsByExperienceAndCitizenship,
   cosineSimilarity,
   cosineSimilarityNormalized,
   findMissingKeywords,

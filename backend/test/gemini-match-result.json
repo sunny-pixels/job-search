@@ -1,0 +1,22 @@
+{
+  "overall_match_score": 68,
+  "skills_match_score": 50,
+  "experience_match_score": 95,
+  "education_match_score": 20,
+  "domain_match_score": 70,
+  "soft_signals_score": 95,
+  "role_identity_match": "PARTIAL",
+  "key_strengths": [
+    "Extensive (7+ years) and highly impactful experience as a Business Analyst/Product Owner, demonstrating strong leadership and ownership.",
+    "Deep expertise in core BA functions: requirements elicitation, user story creation, BRD/FRD, process mapping, UAT, and Agile/Scrum methodologies with quantifiable results.",
+    "Proven ability to drive business impact, reduce rework, improve sprint completion rates, and manage complex projects across diverse, regulated industries (telecom, healthcare).",
+    "Strong technical aptitude with tools like Jira, Confluence, Power BI, Tableau, REST APIs, and adaptability to new technologies like AI-assisted requirement tools."
+  ],
+  "key_gaps": [
+    "Complete absence of Salesforce-specific experience (5+ years as Salesforce BA/Admin) and in-depth technical knowledge of the platform, which is a core requirement for this role.",
+    "Missing the 'Salesforce Admin (ADM-201) certified required' certification, a non-negotiable eligibility criterion.",
+    "No demonstrated experience with specific Salesforce clouds or features mentioned in the JD (e.g., Service Cloud, Omni-Channel, Education Cloud)."
+  ],
+  "recommendation": "MODERATE_MATCH",
+  "detailed_analysis": "Patel Harin presents as an exceptionally strong generalist Business Analyst and Product Owner with a robust 7+ years of experience. Their resume is well-structured, action-oriented, and filled with quantifiable achievements across complex domains like telecom and healthcare. They demonstrate deep practical capability in requirements engineering, Agile methodologies, UAT coordination, and stakeholder management, consistently delivering measurable business impact. The candidate's seniority, leadership in facilitating ceremonies, owning backlogs, and designing dashboards aligns perfectly with a senior-level BA role.\n\nHowever, the critical gap for this specific 'Sr. Salesforce Business Analyst' role is the complete absence of Salesforce platform experience and the required ADM-201 certification. The job description explicitly calls for 5+ years of Salesforce BA/Admin experience and deep technical knowledge of Salesforce capabilities and architecture. While Harin's foundational BA skills are excellent and highly transferable, the Salesforce specialization is a non-negotiable for a senior role of this nature. The lack of this core platform expertise and the required certification significantly impacts the overall match. While the candidate's adaptability and learning potential are high, for a senior role, the expectation is to hit the ground running with the core platform. This candidate would be an excellent fit for a general Senior BA/PO role, but for a *Salesforce* specific one, they fall short on the explicit platform requirements."
+}
