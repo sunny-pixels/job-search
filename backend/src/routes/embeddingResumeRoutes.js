@@ -11,7 +11,8 @@ const {
   getJobProgressEmbedding,
   clearSessionData,
   getAllResumes,
-  downloadResume
+  downloadResume,
+  scoreJobsGemini
 } = require("../controllers/embeddingResumeController");
 const { getRateLimitInfo } = require("../services/rateLimitTracker");
 
@@ -37,6 +38,7 @@ const upload = multer({
 router.post("/upload", upload.single("resume"), uploadResumeEmbedding);
 router.get("/jobs", getMatchingJobsEmbedding);
 router.get("/jobs/progress", getJobProgressEmbedding);
+router.post("/score-jobs", scoreJobsGemini);
 router.post("/clear-session", clearSessionData);
 router.get("/all", getAllResumes);
 router.get("/download/:id", downloadResume);

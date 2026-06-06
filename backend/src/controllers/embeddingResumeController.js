@@ -8,6 +8,7 @@ const { analyzeResumeWithGroq } = require("../services/groqService");
 const { searchMultipleQueries, buildSearchQueries, enrichJobsWithDetails } = require("../services/jsearchService");
 const { filterJobsByExperienceAndCitizenship } = require("../services/embeddingMatcherService");
 const { saveFile } = require("../services/fileStorageService");
+const { scoreJobsWithGemini, formatScoreForFrontend } = require("../services/geminiScoringService");
 const Resume = require("../models/Resume");
 const crypto = require("crypto");
 const path = require("path");
@@ -492,11 +493,85 @@ const downloadResume = async (req, res) => {
   }
 };
 
+/**
+ * Score jobs using Gemini LLM
+ * POST /api/embedding-matcher/score-jobs
+ */
+const scoreJobsGemini = async (req, res) => {
+  try {
+    const sessionId = getSessionId(req);
+    const session = getSession(sessionId);
+    
+    const { resumeId, jobs } = req.body;
+
+    if (!resumeId) {
+      return res.status(400).json({ message: "resumeId is required" });
+    }
+
+    if (!jobs || !Array.isArray(jobs) || jobs.length === 0) {
+      return res.status(400).json({ message: "jobs array is required and must not be empty" });
+    }
+
+    console.log(`\n📊 [Gemini Scoring] Request received:`);
+    console.log(`   Session: ${sessionId}`);
+    console.log(`   Resume ID: ${resumeId}`);
+    console.log(`   Jobs to score: ${jobs.length}`);
+
+    // Get resume from MongoDB
+    const resume = await Resume.findById(resumeId);
+    if (!resume) {
+      return res.status(404).json({ message: "Resume not found" });
+    }
+
+    console.log(`   ✅ Resume found: ${resume.extractedData?.primary_roles?.[0] || 'Unknown'}`);
+
+    // Extract resume full text
+    const resumeText = resume.extractedData?.resumeFullText;
+    if (!resumeText) {
+      return res.status(400).json({ message: "Resume text not available" });
+    }
+
+    console.log(`   📝 Resume text length: ${resumeText.length} characters\n`);
+
+    // Score all jobs using Gemini
+    const startTime = Date.now();
+    const scoringResult = await scoreJobsWithGemini(resumeText, jobs);
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+
+    console.log(`✅ [Gemini Scoring] Complete in ${duration}s\n`);
+
+    // Format results for frontend
+    const formattedJobs = scoringResult.scored.map(formatScoreForFrontend);
+
+    // Build response
+    res.json({
+      message: "Jobs scored successfully with Gemini LLM",
+      scoring_method: "gemini",
+      duration_seconds: parseFloat(duration),
+      summary: {
+        total: scoringResult.total,
+        scored: scoringResult.success_count,
+        failed: scoringResult.failure_count
+      },
+      jobs: formattedJobs,
+      failed_jobs: scoringResult.failed.length > 0 ? scoringResult.failed : null
+    });
+
+  } catch (error) {
+    console.error('❌ [Gemini Scoring] Error:', error);
+    res.status(500).json({
+      message: "Error scoring jobs with Gemini",
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   uploadResumeEmbedding,
   getMatchingJobsEmbedding,
   getJobProgressEmbedding,
   clearSessionData,
   getAllResumes,
-  downloadResume
+  downloadResume,
+  scoreJobsGemini
 };

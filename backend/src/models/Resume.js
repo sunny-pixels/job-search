@@ -42,7 +42,8 @@ const resumeSchema = new mongoose.Schema({
     experience_level: String,
     experience_years: Number,
     summary: String,
-    job_keywords: [String]
+    job_keywords: [String],
+    resumeFullText: String
   },
   uploadedAt: {
     type: Date,
